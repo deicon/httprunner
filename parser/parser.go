@@ -3,13 +3,13 @@ package parser
 import (
 	"bufio"
 	"curlrunner/http"
-	"io/ioutil"
+	"os"
 	"strings"
 )
 
 // Parse parses a .http file and returns a slice of requests
 func Parse(filePath string) ([]http.Request, error) {
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func parseRequest(reqStr string) http.Request {
 		// For other content types (JSON, etc.), preserve line breaks
 		request.Body = strings.Join(bodyLines, "\n")
 	}
-	
+
 	request.Script = strings.Join(scriptLines, "\n")
 
 	return request
