@@ -1,0 +1,35 @@
+### 
+# @name Tarifrechner anlegen
+POST {{.BASEURL}}/api/{{.APIVERSION}}/tarifrechner
+Authorization: Bearer {{.TOKEN}}
+Content-Type: application/json
+
+{
+"tarifrechnerModus": {
+"modus": "{{.MODUS}}",
+"mandant": "DVAG",
+"haushaltsId": "{{.HAUSHALTSID}}"
+},
+"produktKonfigurationId": "Kontoeroeffnung",
+"kundennummern": [
+    "99152160"
+]
+}
+
+> {%
+var jsonData = response.body
+client.global.set("tarifrechnerId", jsonData.id)
+client.global.set("beteiligter_1", jsonData.beteiligte ? jsonData.beteiligte[0].id : "default")
+%}
+
+### 
+# @name Get Example with Variables
+GET {{.EXAMPLE_URL}}?id={{.tarifrechnerId}}
+Accept: application/json
+X-Request-ID: {{.tarifrechnerId}}
+
+> {%
+client.global.set("example_response", response.body)
+%}
+
+### 

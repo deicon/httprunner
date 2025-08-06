@@ -1,0 +1,25 @@
+###
+# @name JSON Test
+GET https://jsonplaceholder.typicode.com/users/1
+Content-Type: application/json
+
+> {%
+var user = response.body;
+client.global.set("userId", user.id);
+client.global.set("userName", user.name);
+client.global.set("userEmail", user.email);
+%}
+
+###
+# @name Using Script Variables
+GET https://jsonplaceholder.typicode.com/posts?userId={{.userId}}
+Content-Type: application/json
+X-User-Name: {{.userName}}
+X-User-Email: {{.userEmail}}
+
+> {%
+var posts = response.body;
+client.global.set("postCount", posts.length);
+%}
+
+###

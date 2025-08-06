@@ -46,31 +46,102 @@ func parseRequest(reqStr string) http.Request {
 		return request
 	}
 
+	// Check for name comment (# @name ...)
+	lineIndex := 0
+	if lineIndex < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[lineIndex]), "# @name ") {
+		request.Name = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[lineIndex]), "# @name "))
+		lineIndex++
+	}
+
+	// Skip any remaining empty lines after name
+	for lineIndex < len(lines) && strings.TrimSpace(lines[lineIndex]) == "" {
+		lineIndex++
+	}
+
+	if lineIndex >= len(lines) {
+		return request
+	}
+
 	// Parse verb and URL
-	parts := strings.SplitN(lines[0], " ", 2)
+	parts := strings.SplitN(lines[lineIndex], " ", 2)
 	if len(parts) == 2 {
 		request.Verb = parts[0]
 		request.URL = parts[1]
 	}
+	lineIndex++
 
 	// Parse headers and body
 	inBody := false
+	inScript := false
 	var bodyLines []string
-	for _, line := range lines[1:] {
-		if inBody {
-			bodyLines = append(bodyLines, line)
+	var scriptLines []string
+
+	for lineIndex < len(lines) {
+		line := lines[lineIndex]
+		lineIndex++
+
+		// Check for script block start
+		if strings.TrimSpace(line) == "> {%" {
+			inScript = true
+			inBody = false
 			continue
 		}
+
+		// Check for script block end
+		if strings.TrimSpace(line) == "%}" && inScript {
+			inScript = false
+			continue
+		}
+
+		// Handle script content
+		if inScript {
+			scriptLines = append(scriptLines, line)
+			continue
+		}
+
+		// Handle body content
+		if inBody {
+			// Don't add the line if we're starting a script block
+			if strings.TrimSpace(line) != "> {%" {
+				bodyLines = append(bodyLines, line)
+			} else {
+				// We found a script block, back up and handle it
+				lineIndex--
+			}
+			continue
+		}
+
+		// Empty line marks start of body
 		if line == "" {
 			inBody = true
 			continue
 		}
+
+		// Parse headers
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) == 2 {
 			request.Headers[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 		}
 	}
-	request.Body = strings.Join(bodyLines, "\n")
+
+	// Join body lines based on Content-Type
+	contentType := request.Headers["Content-Type"]
+	if contentType == "application/x-www-form-urlencoded" {
+		// For form URL encoded, join with no separator and trim spaces/line breaks
+		bodyParts := make([]string, 0, len(bodyLines))
+		for _, line := range bodyLines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				bodyParts = append(bodyParts, trimmed)
+			}
+		}
+		request.Body = strings.Join(bodyParts, "")
+	} else {
+		// For other content types (JSON, etc.), preserve line breaks
+		request.Body = strings.Join(bodyLines, "\n")
+	}
+	
+	request.Script = strings.Join(scriptLines, "\n")
 
 	return request
 }
