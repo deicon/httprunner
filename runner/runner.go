@@ -31,6 +31,22 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request) *Ru
 	}
 }
 
+// NewRunnerWithEnvFile creates a new Runner with env file support
+func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.Request, envFile string) (*Runner, error) {
+	te, err := template.NewTemplateEngineWithEnvFile(envFile)
+	if err != nil {
+		return nil, err
+	}
+	
+	return &Runner{
+		Concurrency:    concurrency,
+		Iterations:     iterations,
+		Delay:          delay,
+		Requests:       requests,
+		templateEngine: te,
+	}, nil
+}
+
 // Run executes the requests
 func (r *Runner) Run() {
 	var wg sync.WaitGroup

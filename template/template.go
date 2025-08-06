@@ -1,10 +1,12 @@
 package template
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"text/template"
 
@@ -38,6 +40,46 @@ func NewGlobalStore() *GlobalStore {
 	}
 
 	return store
+}
+
+// LoadEnvFile loads environment variables from a .env file
+func (gs *GlobalStore) LoadEnvFile(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return fmt.Errorf("error opening .env file: %v", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Find the first '=' to split key and value
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// Remove quotes if present
+		if len(value) >= 2 {
+			if (strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"")) ||
+				(strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")) {
+				value = value[1 : len(value)-1]
+			}
+		}
+
+		gs.Set(key, value)
+	}
+
+	return scanner.Err()
 }
 
 // Set stores a value in the global store
@@ -76,6 +118,19 @@ func NewTemplateEngine() *TemplateEngine {
 	return &TemplateEngine{
 		globalStore: NewGlobalStore(),
 	}
+}
+
+// NewTemplateEngineWithEnvFile creates a new template engine with env file loaded
+func NewTemplateEngineWithEnvFile(envFile string) (*TemplateEngine, error) {
+	store := NewGlobalStore()
+	if envFile != "" {
+		if err := store.LoadEnvFile(envFile); err != nil {
+			return nil, err
+		}
+	}
+	return &TemplateEngine{
+		globalStore: store,
+	}, nil
 }
 
 // RenderTemplate renders a template string with global variables

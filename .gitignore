@@ -1,2 +1,3 @@
 curlrunner
 requests.http
+*.env

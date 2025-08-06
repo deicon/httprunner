@@ -14,6 +14,7 @@ func main() {
 	iterations := flag.Int("i", 1, "Number of iterations")
 	delay := flag.Int("d", 0, "Delay between iterations in milliseconds")
 	requestFile := flag.String("f", "", ".http file containing http requests")
+	envFile := flag.String("e", "", ".env file containing environment variables")
 
 	flag.Parse()
 
@@ -28,6 +29,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	r := runner.NewRunner(*concurrency, *iterations, *delay, requests)
+	var r *runner.Runner
+	if *envFile != "" {
+		r, err = runner.NewRunnerWithEnvFile(*concurrency, *iterations, *delay, requests, *envFile)
+		if err != nil {
+			fmt.Printf("Error loading env file: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		r = runner.NewRunner(*concurrency, *iterations, *delay, requests)
+	}
+	
 	r.Run()
 }
