@@ -34,7 +34,7 @@ Content-Type: application/json
 {
 "tarifrechnerModus": {
 "modus": "{{.MODUS}}",
-"mandant": "DVAG",
+"mandant": "ORGA",
 "haushaltsId": "{{.HAUSHALTSID-6905550}}"
 },
 "produktKonfigurationId": "Kontoeroeffnung",

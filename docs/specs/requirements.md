@@ -47,7 +47,7 @@ Content-Type: application/json
 {
 "tarifrechnerModus": {
 "modus": "TARIFRECHNER",
-"mandant": "DVAG",
+"mandant": "ORGA",
 "haushaltsId": 48296349
 },
 "kundennummern": [87468640],
