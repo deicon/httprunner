@@ -1,0 +1,31 @@
+# Build artifacts
+build/
+curlrunner
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*_test.go
+
+# GitHub workflows (not needed in container)
+.github/
+
+# Docker files
+Dockerfile*
+.dockerignore
