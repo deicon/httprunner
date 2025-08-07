@@ -39,6 +39,6 @@ func main() {
 	} else {
 		r = runner.NewRunner(*concurrency, *iterations, *delay, requests)
 	}
-	
+
 	r.Run()
 }

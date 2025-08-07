@@ -62,6 +62,32 @@ func parseRequest(reqStr string) http.Request {
 		return request
 	}
 
+	// Check for pre-request script block before HTTP verb/URL
+	var preScriptLines []string
+	if lineIndex < len(lines) && strings.TrimSpace(lines[lineIndex]) == "> {%" {
+		lineIndex++ // Skip the opening tag
+		inPreScript := true
+		for lineIndex < len(lines) && inPreScript {
+			line := lines[lineIndex]
+			if strings.TrimSpace(line) == "%}" {
+				inPreScript = false
+			} else {
+				preScriptLines = append(preScriptLines, line)
+			}
+			lineIndex++
+		}
+		// Skip empty line after script block
+		for lineIndex < len(lines) && strings.TrimSpace(lines[lineIndex]) == "" {
+			lineIndex++
+		}
+	}
+
+	request.PreScript = strings.Join(preScriptLines, "\n")
+
+	if lineIndex >= len(lines) {
+		return request
+	}
+
 	// Parse verb and URL
 	parts := strings.SplitN(lines[lineIndex], " ", 2)
 	if len(parts) == 2 {

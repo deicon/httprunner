@@ -65,10 +65,16 @@ URLs, headers, and request bodies support Go template syntax using `{{.VARIABLE_
 
 ### JavaScript Scripting
 
-Post-request JavaScript code can be embedded using `> {%` and `%}` blocks. The script has access to:
-- `response.body`: The response body (parsed as JSON if valid, otherwise as string)
-- `client.global.set(key, value)`: Store values in global variables
-- `client.global.get(key)`: Retrieve values from global variables
+JavaScript code can be embedded using `> {%` and `%}` blocks in two locations:
+
+1. **Pre-request scripts**: Placed before the HTTP verb/URL line (separated by blank lines). These scripts execute before the request is sent and have access to:
+   - `client.global.set(key, value)`: Store values in global variables
+   - `client.global.get(key)`: Retrieve values from global variables
+
+2. **Post-request scripts**: Placed after the request body. These scripts execute after the request is sent and have access to:
+   - `response.body`: The response body (parsed as JSON if valid, otherwise as string)
+   - `client.global.set(key, value)`: Store values in global variables
+   - `client.global.get(key)`: Retrieve values from global variables
 
 ### Example requests.http
 
@@ -100,9 +106,16 @@ Accept: application/json
 ```
 ### 
 # @name Tarifrechner anlegen
+> {%
+// Pre-request script: Set up dynamic values before the request
+client.global.set("currentTimestamp", Date.now().toString())
+client.global.set("requestId", "req_" + Math.random().toString(36).substring(7))
+%}
+
 POST {{.BASEURL}}/api/{{.APIVERSION}}/tarifrechner
 Authorization: Bearer {{.TOKEN}}
 Content-Type: application/json
+X-Request-ID: {{.requestId}}
 
 {
 "tarifrechnerModus": {
@@ -113,10 +126,12 @@ Content-Type: application/json
 "produktKonfigurationId": "Kontoeroeffnung",
 "kundennummern": [
     "99152160"
-]
+],
+"timestamp": "{{.currentTimestamp}}"
 }
 
 > {%
+// Post-request script: Extract values from response
 var jsonData = response.body
 client.global.set("tarifrechnerId", jsonData.id)
 client.global.set("beteiligter_1", jsonData.beteiligte ? jsonData.beteiligte[0].id : "default")

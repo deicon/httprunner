@@ -53,7 +53,7 @@ func (gs *GlobalStore) LoadEnvFile(filename string) error {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -100,7 +100,7 @@ func (gs *GlobalStore) Get(key string) interface{} {
 func (gs *GlobalStore) GetAll() map[string]interface{} {
 	gs.mu.RLock()
 	defer gs.mu.RUnlock()
-	
+
 	result := make(map[string]interface{})
 	for k, v := range gs.data {
 		result[k] = v

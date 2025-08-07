@@ -53,3 +53,7 @@ client.global.set("beteiligter_1", jsonData.beteiligte[0].id)
 
 %}
 
+Scripts should also be placed just before the Line starting with the VERB and URL delimited by a blank line.
+Scripts before the request VERB and URL will be executed before the request is sent, allowing you to client.global variables. 
+
+Scripts after the optional body will be executed after the request is sent, allowing you to access the response body and set global variables based on it.

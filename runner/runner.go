@@ -37,7 +37,7 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &Runner{
 		Concurrency:    concurrency,
 		Iterations:     iterations,
@@ -70,6 +70,13 @@ func (r *Runner) Run() {
 }
 
 func (r *Runner) execute(req chttp.Request) error {
+	// Execute pre-request script if present
+	if req.PreScript != "" {
+		if err := r.templateEngine.ExecuteScript(req.PreScript, ""); err != nil {
+			return fmt.Errorf("error executing pre-request script: %v", err)
+		}
+	}
+
 	// Render templates in URL
 	renderedURL, err := r.templateEngine.RenderTemplate(req.URL)
 	if err != nil {
