@@ -1,4 +1,4 @@
-module curlrunner
+module httprunner
 
 go 1.24.5
 

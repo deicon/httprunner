@@ -2,7 +2,8 @@ package parser
 
 import (
 	"bufio"
-	"curlrunner/http"
+	"httprunner/http"
+
 	"os"
 	"strings"
 )

@@ -2,9 +2,9 @@ package runner
 
 import (
 	"bytes"
-	chttp "curlrunner/http"
-	"curlrunner/template"
 	"fmt"
+	chttp "httprunner/http"
+	"httprunner/template"
 	"io"
 	nethttp "net/http"
 	"sync"

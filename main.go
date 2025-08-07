@@ -1,10 +1,10 @@
 package main
 
 import (
-	"curlrunner/parser"
-	"curlrunner/runner"
 	"flag"
 	"fmt"
+	"httprunner/parser"
+	"httprunner/runner"
 	"os"
 )
 

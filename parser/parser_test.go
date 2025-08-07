@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"curlrunner/http"
+	"httprunner/http"
 	"os"
 	"reflect"
 	"strings"
