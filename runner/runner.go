@@ -5,7 +5,7 @@ import (
 	chttp "curlrunner/http"
 	"curlrunner/template"
 	"fmt"
-	"io/ioutil"
+	"io"
 	nethttp "net/http"
 	"sync"
 	"time"
@@ -17,7 +17,7 @@ type Runner struct {
 	Iterations     int
 	Delay          int
 	Requests       []chttp.Request
-	templateEngine *template.TemplateEngine
+	templateEngine *template.Engine
 }
 
 // NewRunner creates a new Runner
@@ -118,9 +118,14 @@ func (r *Runner) execute(req chttp.Request) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(resp.Body)
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package parser
 
 import (
 	"curlrunner/http"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -32,11 +31,13 @@ Accept: application/json
 
 ###
 `
-	tmpfile, err := ioutil.TempFile("", "test.http")
+	tmpfile, err := os.CreateTemp("", "test.http")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer func(name string) {
+		_ = os.Remove(name)
+	}(tmpfile.Name())
 
 	if _, err := tmpfile.Write([]byte(content)); err != nil {
 		t.Fatal(err)
@@ -115,11 +116,13 @@ client.global.set("responseId", jsonData.id)
 
 ###
 `
-	tmpfile, err := ioutil.TempFile("", "test-prescript.http")
+	tmpfile, err := os.CreateTemp("", "test-prescript.http")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer func(name string) {
+		_ = os.Remove(name)
+	}(tmpfile.Name())
 
 	if _, err := tmpfile.Write([]byte(content)); err != nil {
 		t.Fatal(err)

@@ -16,7 +16,7 @@ func TestGlobalStore(t *testing.T) {
 	}
 
 	// Test environment variables are loaded
-	os.Setenv("TEST_ENV_VAR", "env_value")
+	_ = os.Setenv("TEST_ENV_VAR", "env_value")
 	store = NewGlobalStore()
 	envValue := store.Get("TEST_ENV_VAR")
 	if envValue != "env_value" {

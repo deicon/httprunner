@@ -48,7 +48,9 @@ func (gs *GlobalStore) LoadEnvFile(filename string) error {
 	if err != nil {
 		return fmt.Errorf("error opening .env file: %v", err)
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		_ = file.Close()
+	}(file)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -109,32 +111,32 @@ func (gs *GlobalStore) GetAll() map[string]interface{} {
 }
 
 // TemplateEngine handles template rendering and JavaScript execution
-type TemplateEngine struct {
+type Engine struct {
 	globalStore *GlobalStore
 }
 
 // NewTemplateEngine creates a new template engine
-func NewTemplateEngine() *TemplateEngine {
-	return &TemplateEngine{
+func NewTemplateEngine() *Engine {
+	return &Engine{
 		globalStore: NewGlobalStore(),
 	}
 }
 
 // NewTemplateEngineWithEnvFile creates a new template engine with env file loaded
-func NewTemplateEngineWithEnvFile(envFile string) (*TemplateEngine, error) {
+func NewTemplateEngineWithEnvFile(envFile string) (*Engine, error) {
 	store := NewGlobalStore()
 	if envFile != "" {
 		if err := store.LoadEnvFile(envFile); err != nil {
 			return nil, err
 		}
 	}
-	return &TemplateEngine{
+	return &Engine{
 		globalStore: store,
 	}, nil
 }
 
 // RenderTemplate renders a template string with global variables
-func (te *TemplateEngine) RenderTemplate(templateStr string) (string, error) {
+func (te *Engine) RenderTemplate(templateStr string) (string, error) {
 	tmpl, err := template.New("request").Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("template parse error: %v", err)
@@ -149,7 +151,7 @@ func (te *TemplateEngine) RenderTemplate(templateStr string) (string, error) {
 }
 
 // ExecuteScript executes JavaScript code with access to global store and response
-func (te *TemplateEngine) ExecuteScript(script string, responseBody string) error {
+func (te *Engine) ExecuteScript(script string, responseBody string) error {
 	vm := goja.New()
 
 	// Create client.global object
@@ -157,17 +159,17 @@ func (te *TemplateEngine) ExecuteScript(script string, responseBody string) erro
 	globalObj := vm.NewObject()
 
 	// Add set method
-	globalObj.Set("set", func(key string, value interface{}) {
+	_ = globalObj.Set("set", func(key string, value interface{}) {
 		te.globalStore.Set(key, value)
 	})
 
 	// Add get method
-	globalObj.Set("get", func(key string) interface{} {
+	_ = globalObj.Set("get", func(key string) interface{} {
 		return te.globalStore.Get(key)
 	})
 
-	clientObj.Set("global", globalObj)
-	vm.Set("client", clientObj)
+	_ = clientObj.Set("global", globalObj)
+	_ = vm.Set("client", clientObj)
 
 	// Parse response body as JSON if possible
 	var responseData interface{}
@@ -184,8 +186,8 @@ func (te *TemplateEngine) ExecuteScript(script string, responseBody string) erro
 
 	// Create response object
 	responseObj := vm.NewObject()
-	responseObj.Set("body", responseData)
-	vm.Set("response", responseObj)
+	_ = responseObj.Set("body", responseData)
+	_ = vm.Set("response", responseObj)
 
 	// Execute the script
 	_, err := vm.RunString(script)
@@ -197,6 +199,6 @@ func (te *TemplateEngine) ExecuteScript(script string, responseBody string) erro
 }
 
 // GetGlobalStore returns the global store for external access
-func (te *TemplateEngine) GetGlobalStore() *GlobalStore {
+func (te *Engine) GetGlobalStore() *GlobalStore {
 	return te.globalStore
 }
