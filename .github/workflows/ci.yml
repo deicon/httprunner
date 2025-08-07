@@ -132,7 +132,7 @@ jobs:
         go build -ldflags "-X main.version=${VERSION} -s -w" -o build/${BINARY_NAME}
         
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: curlrunner-${{ matrix.name }}
         path: build/curlrunner-${{ matrix.name }}${{ matrix.ext }}
