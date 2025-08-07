@@ -1,5 +1,5 @@
 # Variables
-BINARY_NAME=curlrunner
+BINARY_NAME=httprunner
 BUILD_DIR=build
 VERSION=$(shell git describe --tags --always --dirty)
 LDFLAGS=-ldflags "-X main.version=${VERSION}"

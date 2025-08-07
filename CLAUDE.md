@@ -1,11 +1,11 @@
-# curlrunner
+# httprunner
 
 A Go-based command-line tool for running multiple, parallel HTTP requests.
 
 ## Project Structure
 
 ```
-curlrunner/
+github.com/deicon/httprunner/
 ├── main.go              # Entry point and CLI argument parsing
 ├── http/
 │   └── requests.go      # HTTP request data structure
@@ -23,7 +23,7 @@ curlrunner/
 ## Usage
 
 ```bash
-./curlrunner -t <threads> -i <iterations> -d <delay> -f <file>
+./httprunner -t <threads> -i <iterations> -d <delay> -f <file>
 ```
 
 ### Parameters
@@ -34,7 +34,7 @@ curlrunner/
 
 ### Example
 ```bash
-./curlrunner -t 20 -i 10 -d 1000 -f requests.http
+./httprunner -t 20 -i 10 -d 1000 -f requests.http
 ```
 
 ## HTTP Request File Format
@@ -156,7 +156,7 @@ go build
 go test ./parser
 
 # Run with sample requests
-./curlrunner -t 1 -i 1 -d 0 -f requests.http
+./httprunner -t 1 -i 1 -d 0 -f requests.http
 ```
 
 ## Architecture

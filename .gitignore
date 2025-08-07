@@ -1,4 +1,4 @@
-curlrunner
+httprunner
 requests.http
 *.env
 build

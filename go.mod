@@ -1,4 +1,5 @@
-module httprunner
+module github.com/deicon/httprunner
+
 
 go 1.24.5
 

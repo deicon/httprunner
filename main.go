@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"httprunner/parser"
-	"httprunner/runner"
+	"github.com/deicon/httprunner/parser"
+	"github.com/deicon/httprunner/runner"
 	"os"
 )
 

@@ -2,7 +2,7 @@ package parser
 
 import (
 	"bufio"
-	"httprunner/http"
+	"github.com/deicon/httprunner/http"
 
 	"os"
 	"strings"

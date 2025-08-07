@@ -127,15 +127,15 @@ jobs:
         CGO_ENABLED: 0
       run: |
         VERSION=$(git describe --tags --always --dirty)
-        BINARY_NAME=curlrunner-${{ matrix.name }}${{ matrix.ext }}
+        BINARY_NAME=httprunner-${{ matrix.name }}${{ matrix.ext }}
         mkdir -p build
         go build -ldflags "-X main.version=${VERSION} -s -w" -o build/${BINARY_NAME}
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: curlrunner-${{ matrix.name }}
-        path: build/curlrunner-${{ matrix.name }}${{ matrix.ext }}
+        name: httprunner-${{ matrix.name }}
+        path: build/httprunner-${{ matrix.name }}${{ matrix.ext }}
         retention-days: 30
 
   release:
@@ -164,7 +164,7 @@ jobs:
     - name: Create release archives
       run: |
         cd build
-        for file in curlrunner-*; do
+        for file in httprunner-*; do
           if [[ "$file" == *".exe" ]]; then
             # Windows executable - create zip
             zip "${file%.exe}.zip" "$file"

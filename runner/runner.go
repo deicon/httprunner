@@ -3,8 +3,8 @@ package runner
 import (
 	"bytes"
 	"fmt"
-	chttp "httprunner/http"
-	"httprunner/template"
+	chttp "github.com/deicon/httprunner/http"
+	"github.com/deicon/httprunner/template"
 	"io"
 	nethttp "net/http"
 	"sync"

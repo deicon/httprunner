@@ -16,7 +16,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.version=$(git describe --tags --always --dirty) -s -w" -o curlrunner
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.version=$(git describe --tags --always --dirty) -s -w" -o httprunner
 
 # Final stage
 FROM alpine:latest
@@ -27,16 +27,16 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 
 # Copy the binary from builder stage
-COPY --from=builder /app/curlrunner .
+COPY --from=builder /app/httprunner .
 
 # Make it executable
-RUN chmod +x ./curlrunner
+RUN chmod +x ./httprunner
 
 # Create a directory for HTTP request files
 RUN mkdir -p /requests
 
 # Set the binary as the entrypoint
-ENTRYPOINT ["./curlrunner"]
+ENTRYPOINT ["./httprunner"]
 
 # Default command shows help
 CMD ["--help"]

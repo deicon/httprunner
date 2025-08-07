@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"httprunner/http"
+	"github.com/deicon/httprunner/http"
 	"os"
 	"reflect"
 	"strings"
