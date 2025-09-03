@@ -3,12 +3,13 @@ package runner
 import (
 	"bytes"
 	"fmt"
-	chttp "github.com/deicon/httprunner/http"
-	"github.com/deicon/httprunner/template"
 	"io"
 	nethttp "net/http"
 	"sync"
 	"time"
+
+	chttp "github.com/deicon/httprunner/http"
+	"github.com/deicon/httprunner/template"
 )
 
 // Runner executes HTTP requests
@@ -60,8 +61,8 @@ func (r *Runner) Run() {
 					if err := r.execute(req); err != nil {
 						fmt.Printf("[Worker %d] Error: %v\n", workerID, err)
 					}
+					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
 				}
-				time.Sleep(time.Duration(r.Delay) * time.Millisecond)
 			}
 		}(i)
 	}
