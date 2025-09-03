@@ -14,37 +14,32 @@ import (
 
 // Runner executes HTTP requests
 type Runner struct {
-	Concurrency    int
-	Iterations     int
-	Delay          int
-	Requests       []chttp.Request
-	templateEngine *template.Engine
+	Concurrency int
+	Iterations  int
+	Delay       int
+	Requests    []chttp.Request
+	envFile     string
 }
 
 // NewRunner creates a new Runner
 func NewRunner(concurrency, iterations, delay int, requests []chttp.Request) *Runner {
 	return &Runner{
-		Concurrency:    concurrency,
-		Iterations:     iterations,
-		Delay:          delay,
-		Requests:       requests,
-		templateEngine: template.NewTemplateEngine(),
+		Concurrency: concurrency,
+		Iterations:  iterations,
+		Delay:       delay,
+		Requests:    requests,
 	}
 }
 
 // NewRunnerWithEnvFile creates a new Runner with env file support
 func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.Request, envFile string) (*Runner, error) {
-	te, err := template.NewTemplateEngineWithEnvFile(envFile)
-	if err != nil {
-		return nil, err
-	}
 
 	return &Runner{
-		Concurrency:    concurrency,
-		Iterations:     iterations,
-		Delay:          delay,
-		Requests:       requests,
-		templateEngine: te,
+		Concurrency: concurrency,
+		Iterations:  iterations,
+		Delay:       delay,
+		Requests:    requests,
+		envFile:     envFile,
 	}, nil
 }
 
@@ -57,8 +52,9 @@ func (r *Runner) Run() {
 		go func(workerID int) {
 			defer wg.Done()
 			for j := 0; j < r.Iterations; j++ {
+				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
 				for _, req := range r.Requests {
-					if err := r.execute(req); err != nil {
+					if err := r.execute(req, templateEngine); err != nil {
 						fmt.Printf("[Worker %d] Error: %v\n", workerID, err)
 					}
 					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
@@ -70,16 +66,16 @@ func (r *Runner) Run() {
 	wg.Wait()
 }
 
-func (r *Runner) execute(req chttp.Request) error {
+func (r *Runner) execute(req chttp.Request, te *template.Engine) error {
 	// Execute pre-request script if present
 	if req.PreScript != "" {
-		if err := r.templateEngine.ExecuteScript(req.PreScript, ""); err != nil {
+		if err := te.ExecuteScript(req.PreScript, ""); err != nil {
 			return fmt.Errorf("error executing pre-request script: %v", err)
 		}
 	}
 
 	// Render templates in URL
-	renderedURL, err := r.templateEngine.RenderTemplate(req.URL)
+	renderedURL, err := te.RenderTemplate(req.URL)
 	if err != nil {
 		return fmt.Errorf("error rendering URL template: %v", err)
 	}
@@ -87,11 +83,11 @@ func (r *Runner) execute(req chttp.Request) error {
 	// Render templates in headers
 	renderedHeaders := make(map[string]string)
 	for key, value := range req.Headers {
-		renderedKey, err := r.templateEngine.RenderTemplate(key)
+		renderedKey, err := te.RenderTemplate(key)
 		if err != nil {
 			return fmt.Errorf("error rendering header key template: %v", err)
 		}
-		renderedValue, err := r.templateEngine.RenderTemplate(value)
+		renderedValue, err := te.RenderTemplate(value)
 		if err != nil {
 			return fmt.Errorf("error rendering header value template: %v", err)
 		}
@@ -99,7 +95,7 @@ func (r *Runner) execute(req chttp.Request) error {
 	}
 
 	// Render templates in body
-	renderedBody, err := r.templateEngine.RenderTemplate(req.Body)
+	renderedBody, err := te.RenderTemplate(req.Body)
 	if err != nil {
 		return fmt.Errorf("error rendering body template: %v", err)
 	}
@@ -141,7 +137,7 @@ func (r *Runner) execute(req chttp.Request) error {
 
 	// Execute post-request script if present
 	if req.Script != "" {
-		if err := r.templateEngine.ExecuteScript(req.Script, responseBody); err != nil {
+		if err := te.ExecuteScript(req.Script, responseBody); err != nil {
 			return fmt.Errorf("error executing script: %v", err)
 		}
 	}
