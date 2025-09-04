@@ -10,6 +10,7 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/dop251/goja"
 )
 
@@ -137,7 +138,7 @@ func NewTemplateEngineWithEnvFile(envFile string) (*Engine, error) {
 
 // RenderTemplate renders a template string with global variables
 func (te *Engine) RenderTemplate(templateStr string) (string, error) {
-	tmpl, err := template.New("request").Parse(templateStr)
+	tmpl, err := template.New("request").Funcs(sprig.GenericFuncMap()).Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("template parse error: %v", err)
 	}

@@ -9,6 +9,17 @@ import (
 	"strings"
 )
 
+type multiStringFlag []string
+
+func (m *multiStringFlag) String() string {
+	return strings.Join(*m, ", ")
+}
+
+func (m *multiStringFlag) Set(value string) error {
+	*m = append(*m, value)
+	return nil
+}
+
 type HAR struct {
 	Log Log `json:"log"`
 }
@@ -47,7 +58,7 @@ type Parameter struct {
 type Config struct {
 	InputFile  string
 	OutputFile string
-	Filter     string
+	Filters    []string
 	Help       bool
 }
 
@@ -68,10 +79,14 @@ func main() {
 		log.Fatalf("Error parsing HAR file: %v", err)
 	}
 
-	filteredEntries := filterEntries(harData.Log.Entries, config.Filter)
+	filteredEntries := filterEntries(harData.Log.Entries, config.Filters)
 
 	if len(filteredEntries) == 0 {
-		fmt.Printf("No requests found matching filter: %s\n", config.Filter)
+		if len(config.Filters) > 0 {
+			fmt.Printf("No requests found matching filters: %s\n", strings.Join(config.Filters, ", "))
+		} else {
+			fmt.Println("No requests found")
+		}
 		return
 	}
 
@@ -90,17 +105,19 @@ func main() {
 
 func parseFlags() Config {
 	var config Config
+	var filters multiStringFlag
 
 	flag.StringVar(&config.InputFile, "f", "", "Input HAR file path (required)")
 	flag.StringVar(&config.InputFile, "file", "", "Input HAR file path (required)")
 	flag.StringVar(&config.OutputFile, "o", "", "Output .http file path (optional, prints to stdout if not specified)")
 	flag.StringVar(&config.OutputFile, "output", "", "Output .http file path (optional, prints to stdout if not specified)")
-	flag.StringVar(&config.Filter, "filter", "", "Filter requests by URL substring (optional)")
+	flag.Var(&filters, "filter", "Filter requests by URL substring (can be used multiple times)")
 	flag.BoolVar(&config.Help, "h", false, "Show help")
 	flag.BoolVar(&config.Help, "help", false, "Show help")
 
 	flag.Parse()
 
+	config.Filters = []string(filters)
 	return config
 }
 
@@ -113,12 +130,13 @@ func printHelp() {
 	fmt.Println("Flags:")
 	fmt.Println("  -f, -file     Input HAR file path (required)")
 	fmt.Println("  -o, -output   Output .http file path (optional, prints to stdout if not specified)")
-	fmt.Println("  -filter       Filter requests by URL substring (optional)")
+	fmt.Println("  -filter       Filter requests by URL substring (can be used multiple times)")
 	fmt.Println("  -h, -help     Show this help message")
 	fmt.Println("")
 	fmt.Println("Examples:")
 	fmt.Println("  harparser -f recording.har -filter kontoeroeffnung -o requests.http")
 	fmt.Println("  harparser -f recording.har -filter api/v3")
+	fmt.Println("  harparser -f recording.har -filter kontoeroeffnung -filter api/v3 -o requests.http")
 	fmt.Println("  harparser -f recording.har -o all_requests.http")
 }
 
@@ -137,14 +155,22 @@ func parseHARFile(filename string) (*HAR, error) {
 	return &har, nil
 }
 
-func filterEntries(entries []Entry, filter string) []Entry {
-	if filter == "" {
+func filterEntries(entries []Entry, filters []string) []Entry {
+	if len(filters) == 0 {
 		return entries
 	}
 
 	var filtered []Entry
 	for _, entry := range entries {
-		if strings.Contains(entry.Request.URL, filter) {
+		// Check if URL matches any of the filters
+		matches := false
+		for _, filter := range filters {
+			if strings.Contains(entry.Request.URL, filter) {
+				matches = true
+				break
+			}
+		}
+		if matches {
 			filtered = append(filtered, entry)
 		}
 	}
