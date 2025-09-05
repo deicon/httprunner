@@ -51,7 +51,7 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 func (r *Runner) Run() *reporting.Report {
 	var wg sync.WaitGroup
 	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
-	
+
 	wg.Add(r.Concurrency)
 
 	for i := 0; i < r.Concurrency; i++ {
@@ -60,7 +60,7 @@ func (r *Runner) Run() *reporting.Report {
 			for j := 0; j < r.Iterations; j++ {
 				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
 				for _, req := range r.Requests {
-					result := r.execute(req, templateEngine)
+					result := r.execute(req, templateEngine, workerID, j)
 					resultChan <- result
 					if !result.Success {
 						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, result.Error, j+1)
@@ -86,12 +86,53 @@ func (r *Runner) Run() *reporting.Report {
 	return r.Collector.GenerateReport()
 }
 
-func (r *Runner) execute(req chttp.Request, te *template.Engine) reporting.RequestResult {
+// RunHierarchical executes the requests and returns a hierarchical report
+func (r *Runner) RunHierarchical() *reporting.HierarchicalReport {
+	var wg sync.WaitGroup
+	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
+
+	wg.Add(r.Concurrency)
+
+	for i := 0; i < r.Concurrency; i++ {
+		go func(workerID int) {
+			defer wg.Done()
+			for j := 0; j < r.Iterations; j++ {
+				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
+				for _, req := range r.Requests {
+					result := r.execute(req, templateEngine, workerID, j)
+					resultChan <- result
+					if !result.Success {
+						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, result.Error, j+1)
+						return
+					}
+					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
+				}
+			}
+		}(i)
+	}
+
+	// Collect results in a separate goroutine
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect all results
+	for result := range resultChan {
+		r.Collector.AddResult(result)
+	}
+
+	return r.Collector.GenerateHierarchicalReport()
+}
+
+func (r *Runner) execute(req chttp.Request, te *template.Engine, goroutineID, iterationID int) reporting.RequestResult {
 	result := reporting.RequestResult{
-		Name:      req.Name,
-		Verb:      req.Verb,
-		URL:       req.URL,
-		Timestamp: time.Now(),
+		Name:        req.Name,
+		Verb:        req.Verb,
+		URL:         req.URL,
+		Timestamp:   time.Now(),
+		GoroutineID: goroutineID,
+		IterationID: iterationID,
 	}
 
 	// Execute pre-request script if present
@@ -155,7 +196,7 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine) reporting.Reque
 	resp, err := client.Do(request)
 	duration := time.Since(start)
 	result.ResponseTime = duration
-	
+
 	if err != nil {
 		result.Success = false
 		result.Error = err.Error()

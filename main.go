@@ -20,6 +20,7 @@ func main() {
 	envFile := flag.String("e", "", ".env file containing environment variables")
 	reportFormat := flag.String("report", "console", "Report format: console, html, csv, json")
 	reportOutput := flag.String("output", "", "Output file for report (optional, prints to stdout if not specified)")
+	reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
 
 	flag.Parse()
 
@@ -35,6 +36,16 @@ func main() {
 		// valid format
 	default:
 		fmt.Printf("Error: Invalid report format '%s'. Valid formats: console, html, csv, json\n", *reportFormat)
+		os.Exit(1)
+	}
+
+	// Validate report detail level
+	detailLevel := reporting.ReportDetailLevel(strings.ToLower(*reportDetail))
+	switch detailLevel {
+	case reporting.DetailSummary, reporting.DetailGoroutine, reporting.DetailIteration, reporting.DetailFull:
+		// valid detail level
+	default:
+		fmt.Printf("Error: Invalid report detail level '%s'. Valid levels: summary, goroutine, iteration, full\n", *reportDetail)
 		os.Exit(1)
 	}
 
@@ -55,11 +66,24 @@ func main() {
 		r = runner.NewRunner(*concurrency, *iterations, *delay, requests)
 	}
 
-	report := r.Run()
+	// Generate appropriate report based on detail level
+	var reportContent string
 
-	// Format and output the report
-	formatter := reporting.GetFormatter(format)
-	reportContent, err := formatter.Format(report)
+	if detailLevel == reporting.DetailSummary {
+		// Use traditional report for summary level
+		report := r.Run()
+		formatter := reporting.GetFormatter(format)
+		reportContent, err = formatter.Format(report)
+	} else {
+		// Use hierarchical report for detailed levels
+		hierarchicalReport := r.RunHierarchical()
+		hierarchicalFormatter := &reporting.HierarchicalFormatter{
+			DetailLevel: detailLevel,
+			Format:      format,
+		}
+		reportContent, err = hierarchicalFormatter.FormatHierarchical(hierarchicalReport)
+	}
+
 	if err != nil {
 		fmt.Printf("Error formatting report: %v\n", err)
 		os.Exit(1)
@@ -81,12 +105,12 @@ func main() {
 				filename += ".txt"
 			}
 		}
-		
+
 		if err := os.WriteFile(filename, []byte(reportContent), 0644); err != nil {
 			fmt.Printf("Error writing report to file: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		fmt.Printf("\nReport saved to: %s\n", filename)
 	} else {
 		// Print to stdout

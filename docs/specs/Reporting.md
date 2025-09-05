@@ -6,7 +6,13 @@ the results of their HTTP requests.
 
 # Report Contents
 
+
 The report will contain the following information:
+
+The system runs the same thest in multiple goroutines, each goroutine will report its results back to a central collector which will aggregate the results and generate the final report.
+The report might aggregate results from all goroutines or provide separate sections for each goroutine's results, depending on user preference.
+Each goroutine will be presented with a unique identifier in the report to distinguish its results.
+The results are shown per goroutine and within this results per iteration.
 
 1. **Total Requests**: The total number of HTTP requests made during the execution.
 2. **Successful Requests**: The number of requests that received a successful response (HTTP status codes 200-299).
