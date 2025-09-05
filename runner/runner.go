@@ -15,15 +15,17 @@ import (
 
 // Runner executes HTTP requests
 type Runner struct {
-	Concurrency int
-	Iterations  int
-	Delay       int
-	Requests    []chttp.Request
-	envFile     string
-	Collector   *reporting.Collector
+	Concurrency       int
+	Iterations        int
+	Delay             int
+	Requests          []chttp.Request
+	envFile           string
+	Collector         *reporting.Collector
+	StreamingCollector *reporting.StreamingCollector
+	OutputDir         string
 }
 
-// NewRunner creates a new Runner
+// NewRunner creates a new Runner with in-memory collection (legacy)
 func NewRunner(concurrency, iterations, delay int, requests []chttp.Request) *Runner {
 	return &Runner{
 		Concurrency: concurrency,
@@ -34,9 +36,25 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request) *Ru
 	}
 }
 
-// NewRunnerWithEnvFile creates a new Runner with env file support
-func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.Request, envFile string) (*Runner, error) {
+// NewStreamingRunner creates a new Runner with file streaming for memory efficiency
+func NewStreamingRunner(concurrency, iterations, delay int, requests []chttp.Request, outputDir string) (*Runner, error) {
+	streamingCollector, err := reporting.NewStreamingCollector(outputDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create streaming collector: %v", err)
+	}
 
+	return &Runner{
+		Concurrency:       concurrency,
+		Iterations:        iterations,
+		Delay:             delay,
+		Requests:          requests,
+		StreamingCollector: streamingCollector,
+		OutputDir:         outputDir,
+	}, nil
+}
+
+// NewRunnerWithEnvFile creates a new Runner with env file support (legacy)
+func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.Request, envFile string) (*Runner, error) {
 	return &Runner{
 		Concurrency: concurrency,
 		Iterations:  iterations,
@@ -44,6 +62,24 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 		Requests:    requests,
 		envFile:     envFile,
 		Collector:   reporting.NewCollector(),
+	}, nil
+}
+
+// NewStreamingRunnerWithEnvFile creates a new Runner with streaming and env file support
+func NewStreamingRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.Request, envFile, outputDir string) (*Runner, error) {
+	streamingCollector, err := reporting.NewStreamingCollector(outputDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create streaming collector: %v", err)
+	}
+
+	return &Runner{
+		Concurrency:       concurrency,
+		Iterations:        iterations,
+		Delay:             delay,
+		Requests:          requests,
+		envFile:           envFile,
+		StreamingCollector: streamingCollector,
+		OutputDir:         outputDir,
 	}, nil
 }
 
@@ -86,6 +122,60 @@ func (r *Runner) Run() *reporting.Report {
 	return r.Collector.GenerateReport()
 }
 
+// RunStreaming executes requests with file streaming to reduce memory usage
+func (r *Runner) RunStreaming() (*reporting.Report, error) {
+	if r.StreamingCollector == nil {
+		return nil, fmt.Errorf("streaming collector not initialized, use NewStreamingRunner")
+	}
+
+	startTime := r.StreamingCollector.GetStartTime()
+	
+	var wg sync.WaitGroup
+	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
+	
+	wg.Add(r.Concurrency)
+
+	for i := 0; i < r.Concurrency; i++ {
+		go func(workerID int) {
+			defer wg.Done()
+			for j := 0; j < r.Iterations; j++ {
+				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
+				for _, req := range r.Requests {
+					result := r.execute(req, templateEngine, workerID, j)
+					resultChan <- result
+					if !result.Success {
+						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, result.Error, j+1)
+						return
+					}
+					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
+				}
+			}
+		}(i)
+	}
+
+	// Stream results to file in a separate goroutine
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Stream all results to file
+	for result := range resultChan {
+		if err := r.StreamingCollector.AddResult(result); err != nil {
+			return nil, fmt.Errorf("failed to stream result: %v", err)
+		}
+	}
+
+	// Close streaming collector
+	if err := r.StreamingCollector.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close streaming collector: %v", err)
+	}
+
+	// Generate report from file
+	fileReporter := reporting.NewFileReporter(r.StreamingCollector.GetResultsFilePath())
+	return fileReporter.GenerateReport(startTime)
+}
+
 // RunHierarchical executes the requests and returns a hierarchical report
 func (r *Runner) RunHierarchical() *reporting.HierarchicalReport {
 	var wg sync.WaitGroup
@@ -123,6 +213,60 @@ func (r *Runner) RunHierarchical() *reporting.HierarchicalReport {
 	}
 
 	return r.Collector.GenerateHierarchicalReport()
+}
+
+// RunHierarchicalStreaming executes requests with file streaming and returns hierarchical report
+func (r *Runner) RunHierarchicalStreaming() (*reporting.HierarchicalReport, error) {
+	if r.StreamingCollector == nil {
+		return nil, fmt.Errorf("streaming collector not initialized, use NewStreamingRunner")
+	}
+
+	startTime := r.StreamingCollector.GetStartTime()
+	
+	var wg sync.WaitGroup
+	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
+	
+	wg.Add(r.Concurrency)
+
+	for i := 0; i < r.Concurrency; i++ {
+		go func(workerID int) {
+			defer wg.Done()
+			for j := 0; j < r.Iterations; j++ {
+				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
+				for _, req := range r.Requests {
+					result := r.execute(req, templateEngine, workerID, j)
+					resultChan <- result
+					if !result.Success {
+						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, result.Error, j+1)
+						return
+					}
+					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
+				}
+			}
+		}(i)
+	}
+
+	// Stream results to file in a separate goroutine
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Stream all results to file
+	for result := range resultChan {
+		if err := r.StreamingCollector.AddResult(result); err != nil {
+			return nil, fmt.Errorf("failed to stream result: %v", err)
+		}
+	}
+
+	// Close streaming collector
+	if err := r.StreamingCollector.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close streaming collector: %v", err)
+	}
+
+	// Generate hierarchical report from file
+	fileReporter := reporting.NewFileReporter(r.StreamingCollector.GetResultsFilePath())
+	return fileReporter.GenerateHierarchicalReport(startTime)
 }
 
 func (r *Runner) execute(req chttp.Request, te *template.Engine, goroutineID, iterationID int) reporting.RequestResult {
