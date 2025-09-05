@@ -4,8 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/deicon/httprunner/parser"
+	"github.com/deicon/httprunner/reporting"
 	"github.com/deicon/httprunner/runner"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 func main() {
@@ -15,11 +18,23 @@ func main() {
 	delay := flag.Int("d", 0, "Delay between iterations in milliseconds")
 	requestFile := flag.String("f", "", ".http file containing http requests")
 	envFile := flag.String("e", "", ".env file containing environment variables")
+	reportFormat := flag.String("report", "console", "Report format: console, html, csv, json")
+	reportOutput := flag.String("output", "", "Output file for report (optional, prints to stdout if not specified)")
 
 	flag.Parse()
 
 	if *requestFile == "" {
 		fmt.Println("Error: -f flag is required")
+		os.Exit(1)
+	}
+
+	// Validate report format
+	format := reporting.ReportFormat(strings.ToLower(*reportFormat))
+	switch format {
+	case reporting.FormatConsole, reporting.FormatHTML, reporting.FormatCSV, reporting.FormatJSON:
+		// valid format
+	default:
+		fmt.Printf("Error: Invalid report format '%s'. Valid formats: console, html, csv, json\n", *reportFormat)
 		os.Exit(1)
 	}
 
@@ -40,5 +55,41 @@ func main() {
 		r = runner.NewRunner(*concurrency, *iterations, *delay, requests)
 	}
 
-	r.Run()
+	report := r.Run()
+
+	// Format and output the report
+	formatter := reporting.GetFormatter(format)
+	reportContent, err := formatter.Format(report)
+	if err != nil {
+		fmt.Printf("Error formatting report: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Output report
+	if *reportOutput != "" {
+		// Generate filename based on format if no extension provided
+		filename := *reportOutput
+		if filepath.Ext(filename) == "" {
+			switch format {
+			case reporting.FormatHTML:
+				filename += ".html"
+			case reporting.FormatCSV:
+				filename += ".csv"
+			case reporting.FormatJSON:
+				filename += ".json"
+			default:
+				filename += ".txt"
+			}
+		}
+		
+		if err := os.WriteFile(filename, []byte(reportContent), 0644); err != nil {
+			fmt.Printf("Error writing report to file: %v\n", err)
+			os.Exit(1)
+		}
+		
+		fmt.Printf("\nReport saved to: %s\n", filename)
+	} else {
+		// Print to stdout
+		fmt.Print(reportContent)
+	}
 }
