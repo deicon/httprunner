@@ -135,7 +135,7 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine) error {
 		requestName = fmt.Sprintf("%s %s", req.Verb, renderedURL)
 	}
 
-	fmt.Printf("%s [%s] URL: %s, Status: %s, Duration: %v, Body: %s\n", time.Now().Format("2006-01-02 15:04:05"), requestName, renderedURL, resp.Status, duration, responseBody)
+	fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v, Body: %s\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration, responseBody)
 
 	// Execute post-request script if present
 	if req.Script != "" {
