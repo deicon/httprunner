@@ -15,14 +15,14 @@ import (
 
 // Runner executes HTTP requests
 type Runner struct {
-	Concurrency       int
-	Iterations        int
-	Delay             int
-	Requests          []chttp.Request
-	envFile           string
-	Collector         *reporting.Collector
+	Concurrency        int
+	Iterations         int
+	Delay              int
+	Requests           []chttp.Request
+	envFile            string
+	Collector          *reporting.Collector
 	StreamingCollector *reporting.StreamingCollector
-	OutputDir         string
+	OutputDir          string
 }
 
 // NewRunner creates a new Runner with in-memory collection (legacy)
@@ -44,12 +44,12 @@ func NewStreamingRunner(concurrency, iterations, delay int, requests []chttp.Req
 	}
 
 	return &Runner{
-		Concurrency:       concurrency,
-		Iterations:        iterations,
-		Delay:             delay,
-		Requests:          requests,
+		Concurrency:        concurrency,
+		Iterations:         iterations,
+		Delay:              delay,
+		Requests:           requests,
 		StreamingCollector: streamingCollector,
-		OutputDir:         outputDir,
+		OutputDir:          outputDir,
 	}, nil
 }
 
@@ -73,13 +73,13 @@ func NewStreamingRunnerWithEnvFile(concurrency, iterations, delay int, requests 
 	}
 
 	return &Runner{
-		Concurrency:       concurrency,
-		Iterations:        iterations,
-		Delay:             delay,
-		Requests:          requests,
-		envFile:           envFile,
+		Concurrency:        concurrency,
+		Iterations:         iterations,
+		Delay:              delay,
+		Requests:           requests,
+		envFile:            envFile,
 		StreamingCollector: streamingCollector,
-		OutputDir:         outputDir,
+		OutputDir:          outputDir,
 	}, nil
 }
 
@@ -129,10 +129,10 @@ func (r *Runner) RunStreaming() (*reporting.Report, error) {
 	}
 
 	startTime := r.StreamingCollector.GetStartTime()
-	
+
 	var wg sync.WaitGroup
 	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
-	
+
 	wg.Add(r.Concurrency)
 
 	for i := 0; i < r.Concurrency; i++ {
@@ -222,10 +222,10 @@ func (r *Runner) RunHierarchicalStreaming() (*reporting.HierarchicalReport, erro
 	}
 
 	startTime := r.StreamingCollector.GetStartTime()
-	
+
 	var wg sync.WaitGroup
 	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
-	
+
 	wg.Add(r.Concurrency)
 
 	for i := 0; i < r.Concurrency; i++ {

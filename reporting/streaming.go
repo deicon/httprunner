@@ -58,7 +58,7 @@ func (sc *StreamingCollector) AddResult(result RequestResult) error {
 	}
 
 	sc.resultCount++
-	
+
 	// Flush every 100 results to ensure data is written
 	if sc.resultCount%100 == 0 {
 		if err := sc.writer.Flush(); err != nil {
