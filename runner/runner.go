@@ -55,7 +55,8 @@ func (r *Runner) Run() {
 				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
 				for _, req := range r.Requests {
 					if err := r.execute(req, templateEngine); err != nil {
-						fmt.Printf("[Worker %d] Error: %v\n", workerID, err)
+						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, err, j+1)
+						return
 					}
 					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
 				}
@@ -133,6 +134,12 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine) error {
 	requestName := req.Name
 	if requestName == "" {
 		requestName = fmt.Sprintf("%s %s", req.Verb, renderedURL)
+	}
+
+	// Check if HTTP status code indicates success (2xx)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v, Body: %s\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration, responseBody)
+		return fmt.Errorf("request failed with status %s", resp.Status)
 	}
 
 	fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v, Body: %s\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration, responseBody)
