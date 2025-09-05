@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
 	"time"
 )
 
@@ -21,36 +20,44 @@ func NewFileReporter(resultsFilePath string) *FileReporter {
 	}
 }
 
-// GenerateReport creates a comprehensive report by reading from the results file
+// GenerateReport creates a comprehensive report by streaming from the results file
 func (fr *FileReporter) GenerateReport(startTime time.Time) (*Report, error) {
-	results, err := fr.readResults()
-	if err != nil {
-		return nil, err
-	}
+	return fr.generateReportStreaming(startTime)
+}
 
-	if len(results) == 0 {
-		return &Report{
-			StartTime: startTime,
-			EndTime:   time.Now(),
-		}, nil
+// generateReportStreaming processes the results file line by line to avoid memory issues
+func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, error) {
+	file, err := os.Open(fr.resultsFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open results file: %v", err)
 	}
+	defer file.Close()
 
 	report := &Report{
-		TotalRequests:            len(results),
 		ResponseTimeDistribution: make(map[string]int),
 		ErrorBreakdown:           make(map[string]int),
 		StartTime:                startTime,
 		EndTime:                  time.Now(),
+		MinResponseTime:          time.Hour, // Initialize to high value
+		MaxResponseTime:          0,
 	}
 
-	// Only include RequestDetails for summary reports to avoid memory issues
-	// For detailed analysis, users should analyze the raw file directly
-
+	scanner := bufio.NewScanner(file)
 	var totalResponseTime time.Duration
-	responseTimes := make([]time.Duration, len(results))
 
-	for i, result := range results {
-		responseTimes[i] = result.ResponseTime
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var result RequestResult
+		if err := json.Unmarshal([]byte(line), &result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal result: %v", err)
+		}
+
+		// Update counters
+		report.TotalRequests++
 		totalResponseTime += result.ResponseTime
 
 		if result.Success {
@@ -60,6 +67,14 @@ func (fr *FileReporter) GenerateReport(startTime time.Time) (*Report, error) {
 			if result.Error != "" {
 				report.ErrorBreakdown[result.Error]++
 			}
+		}
+
+		// Update min/max response times
+		if result.ResponseTime < report.MinResponseTime {
+			report.MinResponseTime = result.ResponseTime
+		}
+		if result.ResponseTime > report.MaxResponseTime {
+			report.MaxResponseTime = result.ResponseTime
 		}
 
 		// Categorize response times
@@ -75,57 +90,55 @@ func (fr *FileReporter) GenerateReport(startTime time.Time) (*Report, error) {
 		}
 	}
 
-	// Calculate average response time
-	if len(results) > 0 {
-		report.AverageResponseTime = totalResponseTime / time.Duration(len(results))
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file: %v", err)
 	}
 
-	// Find min and max response times
-	sort.Slice(responseTimes, func(i, j int) bool {
-		return responseTimes[i] < responseTimes[j]
-	})
-	report.MinResponseTime = responseTimes[0]
-	report.MaxResponseTime = responseTimes[len(responseTimes)-1]
+	// Calculate average response time
+	if report.TotalRequests > 0 {
+		report.AverageResponseTime = totalResponseTime / time.Duration(report.TotalRequests)
+	} else {
+		// Reset min response time if no results
+		report.MinResponseTime = 0
+	}
 
 	return report, nil
 }
 
-// GenerateHierarchicalReport creates a hierarchical report by reading from the results file
+// GenerateHierarchicalReport creates a hierarchical report by streaming from the results file
 func (fr *FileReporter) GenerateHierarchicalReport(startTime time.Time) (*HierarchicalReport, error) {
-	results, err := fr.readResults()
+	return fr.generateHierarchicalReportStreaming(startTime)
+}
+
+// generateHierarchicalReportStreaming processes results in passes to minimize memory usage
+func (fr *FileReporter) generateHierarchicalReportStreaming(startTime time.Time) (*HierarchicalReport, error) {
+	// Generate summary report using streaming
+	summaryReport, err := fr.generateReportStreaming(startTime)
 	if err != nil {
 		return nil, err
 	}
 
-	// Generate summary report
-	summaryReport, err := fr.GenerateReport(startTime)
+	// First pass: collect goroutine/iteration metadata without storing full results
+	goroutineStats, err := fr.collectGoroutineMetadata()
 	if err != nil {
 		return nil, err
-	}
-
-	// Group results by goroutine and iteration
-	goroutineMap := make(map[int]map[int][]RequestResult)
-
-	for _, result := range results {
-		if goroutineMap[result.GoroutineID] == nil {
-			goroutineMap[result.GoroutineID] = make(map[int][]RequestResult)
-		}
-		goroutineMap[result.GoroutineID][result.IterationID] = append(
-			goroutineMap[result.GoroutineID][result.IterationID], result)
 	}
 
 	hierarchical := &HierarchicalReport{
 		Summary:         *summaryReport,
-		Goroutines:      make([]GoroutineReport, 0, len(goroutineMap)),
-		TotalGoroutines: len(goroutineMap),
+		Goroutines:      make([]GoroutineReport, 0, len(goroutineStats)),
+		TotalGoroutines: len(goroutineStats),
 	}
 
-	// Generate goroutine reports
-	for goroutineID, iterations := range goroutineMap {
-		goroutineReport := fr.generateGoroutineReport(goroutineID, iterations)
+	// Generate goroutine reports using streaming approach
+	for goroutineID, metadata := range goroutineStats {
+		goroutineReport, err := fr.generateGoroutineReportStreaming(goroutineID, metadata)
+		if err != nil {
+			return nil, err
+		}
 		hierarchical.Goroutines = append(hierarchical.Goroutines, goroutineReport)
 
-		// Count successful goroutines (goroutines with at least one successful iteration)
+		// Count successful goroutines
 		if goroutineReport.SuccessfulIterations > 0 {
 			hierarchical.SuccessfulGoroutines++
 		} else {
@@ -134,6 +147,209 @@ func (fr *FileReporter) GenerateHierarchicalReport(startTime time.Time) (*Hierar
 	}
 
 	return hierarchical, nil
+}
+
+// goroutineIterationMetadata holds minimal metadata for streaming processing
+type goroutineIterationMetadata struct {
+	iterationIDs map[int]bool
+}
+
+// collectGoroutineMetadata makes a first pass to collect goroutine/iteration structure
+func (fr *FileReporter) collectGoroutineMetadata() (map[int]*goroutineIterationMetadata, error) {
+	file, err := os.Open(fr.resultsFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open results file: %v", err)
+	}
+	defer file.Close()
+
+	goroutineStats := make(map[int]*goroutineIterationMetadata)
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var result RequestResult
+		if err := json.Unmarshal([]byte(line), &result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal result: %v", err)
+		}
+
+		if goroutineStats[result.GoroutineID] == nil {
+			goroutineStats[result.GoroutineID] = &goroutineIterationMetadata{
+				iterationIDs: make(map[int]bool),
+			}
+		}
+		goroutineStats[result.GoroutineID].iterationIDs[result.IterationID] = true
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file: %v", err)
+	}
+
+	return goroutineStats, nil
+}
+
+// generateGoroutineReportStreaming generates a goroutine report by streaming through the file
+func (fr *FileReporter) generateGoroutineReportStreaming(goroutineID int, metadata *goroutineIterationMetadata) (GoroutineReport, error) {
+	report := GoroutineReport{
+		GoroutineID:     goroutineID,
+		Iterations:      make([]IterationReport, 0, len(metadata.iterationIDs)),
+		TotalIterations: len(metadata.iterationIDs),
+		StartTime:       time.Now(),
+		EndTime:         time.Time{},
+	}
+
+	// Process each iteration for this goroutine
+	for iterationID := range metadata.iterationIDs {
+		iterationReport, err := fr.generateIterationReportStreaming(goroutineID, iterationID)
+		if err != nil {
+			return report, err
+		}
+		report.Iterations = append(report.Iterations, iterationReport)
+
+		// Aggregate stats
+		report.TotalRequests += iterationReport.TotalRequests
+		report.SuccessfulRequests += iterationReport.SuccessfulRequests
+		report.FailedRequests += iterationReport.FailedRequests
+
+		// Count successful iterations
+		if iterationReport.FailedRequests == 0 && iterationReport.TotalRequests > 0 {
+			report.SuccessfulIterations++
+		} else {
+			report.FailedIterations++
+		}
+
+		// Track time bounds
+		if iterationReport.StartTime.Before(report.StartTime) || report.StartTime.IsZero() {
+			report.StartTime = iterationReport.StartTime
+		}
+		if iterationReport.EndTime.After(report.EndTime) {
+			report.EndTime = iterationReport.EndTime
+		}
+	}
+
+	// Calculate averages
+	if report.TotalRequests > 0 {
+		// We need to calculate total response time by streaming through matching results
+		totalResponseTime, err := fr.calculateTotalResponseTime(goroutineID, -1)
+		if err != nil {
+			return report, err
+		}
+		report.AverageResponseTime = totalResponseTime / time.Duration(report.TotalRequests)
+	}
+	report.TotalDuration = report.EndTime.Sub(report.StartTime)
+
+	return report, nil
+}
+
+// generateIterationReportStreaming generates an iteration report by streaming through the file
+func (fr *FileReporter) generateIterationReportStreaming(goroutineID, iterationID int) (IterationReport, error) {
+	file, err := os.Open(fr.resultsFilePath)
+	if err != nil {
+		return IterationReport{}, fmt.Errorf("failed to open results file: %v", err)
+	}
+	defer file.Close()
+
+	report := IterationReport{
+		IterationID:    iterationID,
+		RequestResults: nil, // Don't store individual results to save memory
+		TotalRequests:  0,
+		StartTime:      time.Now(),
+		EndTime:        time.Time{},
+	}
+
+	scanner := bufio.NewScanner(file)
+	var totalResponseTime time.Duration
+	firstResult := true
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var result RequestResult
+		if err := json.Unmarshal([]byte(line), &result); err != nil {
+			return report, fmt.Errorf("failed to unmarshal result: %v", err)
+		}
+
+		// Skip results not for this goroutine/iteration
+		if result.GoroutineID != goroutineID || result.IterationID != iterationID {
+			continue
+		}
+
+		report.TotalRequests++
+		totalResponseTime += result.ResponseTime
+
+		if result.Success {
+			report.SuccessfulRequests++
+		} else {
+			report.FailedRequests++
+		}
+
+		// Track time bounds
+		if firstResult {
+			report.StartTime = result.Timestamp
+			report.EndTime = result.Timestamp
+			firstResult = false
+		} else {
+			if result.Timestamp.Before(report.StartTime) {
+				report.StartTime = result.Timestamp
+			}
+			if result.Timestamp.After(report.EndTime) {
+				report.EndTime = result.Timestamp
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return report, fmt.Errorf("error reading file: %v", err)
+	}
+
+	// Calculate averages
+	if report.TotalRequests > 0 {
+		report.AverageResponseTime = totalResponseTime / time.Duration(report.TotalRequests)
+	}
+	report.TotalDuration = report.EndTime.Sub(report.StartTime)
+
+	return report, nil
+}
+
+// calculateTotalResponseTime calculates total response time for a goroutine/iteration filter
+func (fr *FileReporter) calculateTotalResponseTime(goroutineID, iterationID int) (time.Duration, error) {
+	file, err := os.Open(fr.resultsFilePath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open results file: %v", err)
+	}
+	defer file.Close()
+
+	var totalResponseTime time.Duration
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var result RequestResult
+		if err := json.Unmarshal([]byte(line), &result); err != nil {
+			return 0, fmt.Errorf("failed to unmarshal result: %v", err)
+		}
+
+		// Filter by goroutine and optionally by iteration (-1 means all iterations)
+		if result.GoroutineID == goroutineID && (iterationID == -1 || result.IterationID == iterationID) {
+			totalResponseTime += result.ResponseTime
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("error reading file: %v", err)
+	}
+
+	return totalResponseTime, nil
 }
 
 // readResults reads all results from the JSONL file

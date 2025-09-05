@@ -2,6 +2,8 @@ package reporting
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -25,9 +27,13 @@ func NewStreamingCollector(outputDir string) (*StreamingCollector, error) {
 		return nil, fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	// Create raw results file
+	// Create raw results file with unique identifier to prevent collisions
 	timestamp := time.Now().Format("20060102-150405")
-	resultFile, err := os.Create(filepath.Join(outputDir, fmt.Sprintf("raw-results-%s.jsonl", timestamp)))
+	uniqueID, err := generateUniqueID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate unique ID: %v", err)
+	}
+	resultFile, err := os.Create(filepath.Join(outputDir, fmt.Sprintf("raw-results-%s-%s.jsonl", timestamp, uniqueID)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create results file: %v", err)
 	}
@@ -95,4 +101,13 @@ func (sc *StreamingCollector) GetResultCount() int {
 // GetStartTime returns the start time of collection
 func (sc *StreamingCollector) GetStartTime() time.Time {
 	return sc.startTime
+}
+
+// generateUniqueID creates a random 8-character hex string for file uniqueness
+func generateUniqueID() (string, error) {
+	bytes := make([]byte, 4)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }

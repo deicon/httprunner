@@ -130,45 +130,8 @@ func (r *Runner) RunStreaming() (*reporting.Report, error) {
 
 	startTime := r.StreamingCollector.GetStartTime()
 
-	var wg sync.WaitGroup
-	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
-
-	wg.Add(r.Concurrency)
-
-	for i := 0; i < r.Concurrency; i++ {
-		go func(workerID int) {
-			defer wg.Done()
-			for j := 0; j < r.Iterations; j++ {
-				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
-				for _, req := range r.Requests {
-					result := r.execute(req, templateEngine, workerID, j)
-					resultChan <- result
-					if !result.Success {
-						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, result.Error, j+1)
-						return
-					}
-					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
-				}
-			}
-		}(i)
-	}
-
-	// Stream results to file in a separate goroutine
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	// Stream all results to file
-	for result := range resultChan {
-		if err := r.StreamingCollector.AddResult(result); err != nil {
-			return nil, fmt.Errorf("failed to stream result: %v", err)
-		}
-	}
-
-	// Close streaming collector
-	if err := r.StreamingCollector.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close streaming collector: %v", err)
+	if err := r.executeWithStreaming(); err != nil {
+		return nil, err
 	}
 
 	// Generate report from file
@@ -223,6 +186,17 @@ func (r *Runner) RunHierarchicalStreaming() (*reporting.HierarchicalReport, erro
 
 	startTime := r.StreamingCollector.GetStartTime()
 
+	if err := r.executeWithStreaming(); err != nil {
+		return nil, err
+	}
+
+	// Generate hierarchical report from file
+	fileReporter := reporting.NewFileReporter(r.StreamingCollector.GetResultsFilePath())
+	return fileReporter.GenerateHierarchicalReport(startTime)
+}
+
+// executeWithStreaming contains the common streaming execution pattern
+func (r *Runner) executeWithStreaming() error {
 	var wg sync.WaitGroup
 	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
 
@@ -255,18 +229,16 @@ func (r *Runner) RunHierarchicalStreaming() (*reporting.HierarchicalReport, erro
 	// Stream all results to file
 	for result := range resultChan {
 		if err := r.StreamingCollector.AddResult(result); err != nil {
-			return nil, fmt.Errorf("failed to stream result: %v", err)
+			return fmt.Errorf("failed to stream result: %v", err)
 		}
 	}
 
 	// Close streaming collector
 	if err := r.StreamingCollector.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close streaming collector: %v", err)
+		return fmt.Errorf("failed to close streaming collector: %v", err)
 	}
 
-	// Generate hierarchical report from file
-	fileReporter := reporting.NewFileReporter(r.StreamingCollector.GetResultsFilePath())
-	return fileReporter.GenerateHierarchicalReport(startTime)
+	return nil
 }
 
 func (r *Runner) execute(req chttp.Request, te *template.Engine, goroutineID, iterationID int) reporting.RequestResult {

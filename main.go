@@ -22,7 +22,7 @@ func main() {
 	reportFormat := flag.String("report", "html", "Report format: console, html, csv, json")
 	reportOutput := flag.String("output", "", "Output directory for streaming results and reports (enables streaming mode)")
 	reportDetail := flag.String("detail", "full", "Report detail level: summary, goroutine, iteration, full")
-	streaming := flag.Bool("stream", true, "Enable streaming mode to reduce memory usage (requires -output)")
+	streaming := flag.Bool("stream", false, "Enable streaming mode to reduce memory usage (requires -output)")
 
 	flag.Parse()
 
