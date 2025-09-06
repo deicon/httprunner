@@ -12,6 +12,11 @@ import (
 	"github.com/deicon/httprunner/runner"
 )
 
+const (
+	// StreamingThreshold is the minimum number of total operations to automatically enable streaming mode
+	StreamingThreshold = 10000
+)
+
 func main() {
 	// Command line flags
 	concurrency := flag.Int("t", 1, "Number of parallel go routines")
@@ -199,5 +204,5 @@ func main() {
 func shouldUseStreaming(concurrency, iterations, requestCount int) bool {
 	// Use streaming for large workloads that could consume significant memory
 	totalOperations := concurrency * iterations * requestCount
-	return totalOperations > 10000 // Threshold for auto-streaming
+	return totalOperations > StreamingThreshold
 }

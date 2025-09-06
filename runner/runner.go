@@ -86,7 +86,7 @@ func NewStreamingRunnerWithEnvFile(concurrency, iterations, delay int, requests 
 // Run executes the requests and returns a report
 func (r *Runner) Run() *reporting.Report {
 	var wg sync.WaitGroup
-	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
+	resultChan := make(chan reporting.RequestResult, 1000)
 
 	wg.Add(r.Concurrency)
 
@@ -142,7 +142,7 @@ func (r *Runner) RunStreaming() (*reporting.Report, error) {
 // RunHierarchical executes the requests and returns a hierarchical report
 func (r *Runner) RunHierarchical() *reporting.HierarchicalReport {
 	var wg sync.WaitGroup
-	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
+	resultChan := make(chan reporting.RequestResult, 1000)
 
 	wg.Add(r.Concurrency)
 
@@ -198,7 +198,7 @@ func (r *Runner) RunHierarchicalStreaming() (*reporting.HierarchicalReport, erro
 // executeWithStreaming contains the common streaming execution pattern
 func (r *Runner) executeWithStreaming() error {
 	var wg sync.WaitGroup
-	resultChan := make(chan reporting.RequestResult, r.Concurrency*r.Iterations*len(r.Requests))
+	resultChan := make(chan reporting.RequestResult, 1000)
 
 	wg.Add(r.Concurrency)
 
