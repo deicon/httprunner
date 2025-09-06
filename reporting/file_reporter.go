@@ -147,25 +147,25 @@ func (fr *FileReporter) generateHierarchicalReportStreaming(startTime time.Time)
 
 // summaryData aggregates data for the summary report
 type summaryData struct {
-	totalRequests               int
-	successfulRequests          int
-	failedRequests              int
-	totalResponseTime           time.Duration
-	minResponseTime             time.Duration
-	maxResponseTime             time.Duration
-	responseTimeDistribution    map[string]int
-	errorBreakdown              map[string]int
+	totalRequests            int
+	successfulRequests       int
+	failedRequests           int
+	totalResponseTime        time.Duration
+	minResponseTime          time.Duration
+	maxResponseTime          time.Duration
+	responseTimeDistribution map[string]int
+	errorBreakdown           map[string]int
 }
 
 // iterationData holds aggregated data for an iteration
 type iterationData struct {
-	iterationID           int
-	totalRequests         int
-	successfulRequests    int
-	failedRequests        int
-	totalResponseTime     time.Duration
-	startTime             time.Time
-	endTime               time.Time
+	iterationID        int
+	totalRequests      int
+	successfulRequests int
+	failedRequests     int
+	totalResponseTime  time.Duration
+	startTime          time.Time
+	endTime            time.Time
 }
 
 // goroutineData holds aggregated data for a goroutine
@@ -336,14 +336,14 @@ func (fr *FileReporter) buildGoroutineReportFromData(goroutineID int, goroutineD
 	// Process each iteration
 	for _, iteration := range goroutineData.iterations {
 		iterationReport := IterationReport{
-			IterationID:         iteration.iterationID,
-			RequestResults:      nil, // Don't store individual results to save memory
-			TotalRequests:       iteration.totalRequests,
-			SuccessfulRequests:  iteration.successfulRequests,
-			FailedRequests:      iteration.failedRequests,
-			StartTime:           iteration.startTime,
-			EndTime:             iteration.endTime,
-			TotalDuration:       iteration.endTime.Sub(iteration.startTime),
+			IterationID:        iteration.iterationID,
+			RequestResults:     nil, // Don't store individual results to save memory
+			TotalRequests:      iteration.totalRequests,
+			SuccessfulRequests: iteration.successfulRequests,
+			FailedRequests:     iteration.failedRequests,
+			StartTime:          iteration.startTime,
+			EndTime:            iteration.endTime,
+			TotalDuration:      iteration.endTime.Sub(iteration.startTime),
 		}
 
 		// Calculate average response time for iteration
@@ -383,5 +383,3 @@ func (fr *FileReporter) buildGoroutineReportFromData(goroutineID int, goroutineD
 
 	return report
 }
-
-
