@@ -2,3 +2,4 @@ httprunner
 requests.http
 *.env
 build
+/test_*_output*/*

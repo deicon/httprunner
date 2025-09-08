@@ -23,18 +23,18 @@ github.com/deicon/httprunner/
 ## Usage
 
 ```bash
-./httprunner -t <threads> -i <iterations> -d <delay> -f <file>
+./httprunner -u <virtualuser> -i <iterations> -d <delay> -f <file>
 ```
 
 ### Parameters
-- `-t n`: Number of parallel goroutines (default: 1)
+- `-u n`: Number of parallel virtualusers (default: 1)
 - `-i n`: Number of iterations (default: 1)  
 - `-d n`: Delay between iterations in milliseconds (default: 0)
 - `-f filename`: .http file containing HTTP requests (required)
 
 ### Example
 ```bash
-./httprunner -t 20 -i 10 -d 1000 -f requests.http
+./httprunner -u 20 -i 10 -d 1000 -f requests.http
 ```
 
 ## HTTP Request File Format
@@ -70,11 +70,13 @@ JavaScript code can be embedded using `> {%` and `%}` blocks in two locations:
 1. **Pre-request scripts**: Placed before the HTTP verb/URL line (separated by blank lines). These scripts execute before the request is sent and have access to:
    - `client.global.set(key, value)`: Store values in global variables
    - `client.global.get(key)`: Retrieve values from global variables
+   - `client.check(name, checkHandler, failureMessage)`: Perform validation checks (see Check Functions section)
 
 2. **Post-request scripts**: Placed after the request body. These scripts execute after the request is sent and have access to:
    - `response.body`: The response body (parsed as JSON if valid, otherwise as string)
    - `client.global.set(key, value)`: Store values in global variables
    - `client.global.get(key)`: Retrieve values from global variables
+   - `client.check(name, checkHandler, failureMessage)`: Perform validation checks (see Check Functions section)
 
 ### Example requests.http
 
@@ -145,6 +147,84 @@ Accept: application/json
 
 ###
 ```
+
+### Check Functions
+
+The `client.check()` function allows you to perform validation checks on HTTP responses. These checks are tracked and reported in the final test results.
+
+#### Syntax
+```javascript
+client.check(name, checkHandler, failureMessage)
+```
+
+#### Parameters
+- **name** (string): A unique identifier for the check
+- **checkHandler** (function): A function that returns `true` for success, `false` for failure
+- **failureMessage** (string): Message displayed when the check fails
+
+#### Examples
+
+```
+### 
+# @name API Response Validation
+POST {{.BASEURL}}/api/users
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@example.com"
+}
+
+> {%
+// Post-request validation checks
+client.check("Status Code Check", function() {
+    return response.body.status === "success";
+}, "API should return success status");
+
+client.check("User ID Present", function() {
+    return response.body.user && response.body.user.id;
+}, "Response should contain user ID");
+
+client.check("Valid Email Format", function() {
+    var email = response.body.user.email;
+    return email && email.includes("@");
+}, "Email should be in valid format");
+
+// Store user ID for subsequent requests
+if (response.body.user && response.body.user.id) {
+    client.global.set("userId", response.body.user.id);
+}
+%}
+
+### 
+# @name Get User Details
+GET {{.BASEURL}}/api/users/{{.userId}}
+Authorization: Bearer {{.TOKEN}}
+
+> {%
+client.check("User Details Retrieved", function() {
+    return response.body && response.body.id == client.global.get("userId");
+}, "Should retrieve correct user details");
+
+client.check("Response Time Check", function() {
+    // Note: This is a conceptual example - actual response time would need to be tracked differently
+    return true; // Placeholder for response time validation
+}, "Response time should be acceptable");
+%}
+
+###
+```
+
+#### Check Results in Reports
+
+Check results are included in all report formats:
+
+- **Console**: Shows check summary with total/successful/failed counts and breakdown by check name
+- **HTML**: Displays check metrics in the summary section and detailed results
+- **JSON**: Includes `checkSummaries` object with detailed check statistics
+- **CSV**: Individual check results are included in request details
+
+Failed checks do not stop test execution but are counted and reported for analysis.
 
 ## Building and Testing
 

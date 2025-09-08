@@ -40,6 +40,7 @@ func (c *Collector) GenerateReport() *Report {
 		RequestDetails:           c.results,
 		StartTime:                c.startTime,
 		EndTime:                  time.Now(),
+		CheckSummaries:           make(map[string]CheckSummary),
 	}
 
 	var totalResponseTime time.Duration
@@ -69,6 +70,37 @@ func (c *Collector) GenerateReport() *Report {
 		} else {
 			report.ResponseTimeDistribution[">1s"]++
 		}
+
+		// Process checks
+		for _, check := range result.Checks {
+			report.TotalChecks++
+			if check.Success {
+				report.SuccessfulChecks++
+			} else {
+				report.FailedChecks++
+			}
+
+			// Update check summary
+			summary, exists := report.CheckSummaries[check.Name]
+			if !exists {
+				summary = CheckSummary{
+					Name:            check.Name,
+					FailureMessages: make([]string, 0),
+				}
+			}
+			
+			summary.TotalRuns++
+			if check.Success {
+				summary.SuccessfulRuns++
+			} else {
+				summary.FailedRuns++
+				if check.FailureMessage != "" && !contains(summary.FailureMessages, check.FailureMessage) {
+					summary.FailureMessages = append(summary.FailureMessages, check.FailureMessage)
+				}
+			}
+			
+			report.CheckSummaries[check.Name] = summary
+		}
 	}
 
 	// Calculate average response time
@@ -86,38 +118,48 @@ func (c *Collector) GenerateReport() *Report {
 	return report
 }
 
+// contains checks if a string slice contains a specific string
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
 // GenerateHierarchicalReport creates a hierarchical report with goroutine and iteration breakdown
 func (c *Collector) GenerateHierarchicalReport() *HierarchicalReport {
 	// First generate the summary report
 	summaryReport := c.GenerateReport()
 
-	// Group results by goroutine and iteration
+	// Group results by virtual user and iteration
 	goroutineMap := make(map[int]map[int][]RequestResult)
 
 	for _, result := range c.results {
-		if goroutineMap[result.GoroutineID] == nil {
-			goroutineMap[result.GoroutineID] = make(map[int][]RequestResult)
+		if goroutineMap[result.VirtualUserID] == nil {
+			goroutineMap[result.VirtualUserID] = make(map[int][]RequestResult)
 		}
-		goroutineMap[result.GoroutineID][result.IterationID] = append(
-			goroutineMap[result.GoroutineID][result.IterationID], result)
+		goroutineMap[result.VirtualUserID][result.IterationID] = append(
+			goroutineMap[result.VirtualUserID][result.IterationID], result)
 	}
 
 	hierarchical := &HierarchicalReport{
-		Summary:         *summaryReport,
-		Goroutines:      make([]GoroutineReport, 0, len(goroutineMap)),
-		TotalGoroutines: len(goroutineMap),
+		Summary:               *summaryReport,
+		VirtualUserReports:    make([]GoroutineReport, 0, len(goroutineMap)),
+		TotalVirtualUsers:     len(goroutineMap),
 	}
 
 	// Generate goroutine reports
 	for goroutineID, iterations := range goroutineMap {
 		goroutineReport := c.generateGoroutineReport(goroutineID, iterations)
-		hierarchical.Goroutines = append(hierarchical.Goroutines, goroutineReport)
+		hierarchical.VirtualUserReports = append(hierarchical.VirtualUserReports, goroutineReport)
 
 		// Count successful goroutines (goroutines with at least one successful iteration)
 		if goroutineReport.SuccessfulIterations > 0 {
-			hierarchical.SuccessfulGoroutines++
+			hierarchical.SuccessfulVirtualUsers++
 		} else {
-			hierarchical.FailedGoroutines++
+			hierarchical.FailedVirtualUsers++
 		}
 	}
 

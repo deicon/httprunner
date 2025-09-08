@@ -1,0 +1,50 @@
+ ###
+ # @name Check Demo
+GET https://jsonplaceholder.typicode.com/users/1
+
+ > {%
+     // Test successful checks
+     client.check("Status Check", function() {
+         return response.body.id === 1;
+     }, "User ID should be 1");
+
+     client.check("Name Present", function() {
+         return response.body.name && response.body.name.length > 0;
+     }, "User should have a name");
+
+     client.check("Email Valid", function() {
+         return response.body.email && response.body.email.includes("@");
+     }, "Email should contain @ symbol");
+
+     // Test a failing check
+     client.check("Invalid Check", function() {
+         return response.body.id > 100;
+     }, "This check should fail - ID should be greater than 100");
+
+     // Store data for next request
+     client.global.set("username", response.body.username);
+     client.global.set("id", response.body.id);
+ %}
+
+
+###
+# @name Get Posts by User
+GET https://jsonplaceholder.typicode.com/posts?userId={{.id}}
+
+> {%
+    // Test successful checks
+    client.check("Posts Retrieved", function() {
+        return Array.isArray(response.body) && response.body.length > 0;
+    }, "Should retrieve posts for the user");
+
+    client.check("First Post Valid", function() {
+        return response.body[0] && response.body[0].userId === client.global.get("id");
+    }, "First post's userId should match the user's ID");
+
+    // Test a failing check
+    client.check("No Posts Check", function() {
+        return response.body.length === 0;
+    }, "This check should fail - there should be posts for the user");
+
+
+
