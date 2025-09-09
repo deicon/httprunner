@@ -81,7 +81,15 @@ func (r *Runner) Run() (*reporting.Report, error) {
 
 	// Generate report from file
 	fileReporter := reporting.NewFileReporter(r.StreamingCollector.GetResultsFilePath())
-	return fileReporter.GenerateReport(startTime)
+	report, err := fileReporter.GenerateReport(startTime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add metrics summaries to the report
+	report.MetricsSummaries = r.MetricsCollector.GetSummaries()
+
+	return report, nil
 }
 
 // RunHierarchical executes requests with file streaming and returns hierarchical report
@@ -98,7 +106,15 @@ func (r *Runner) RunHierarchical() (*reporting.HierarchicalReport, error) {
 
 	// Generate hierarchical report from file
 	fileReporter := reporting.NewFileReporter(r.StreamingCollector.GetResultsFilePath())
-	return fileReporter.GenerateHierarchicalReport(startTime)
+	hierarchicalReport, err := fileReporter.GenerateHierarchicalReport(startTime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add metrics summaries to the summary report
+	hierarchicalReport.Summary.MetricsSummaries = r.MetricsCollector.GetSummaries()
+
+	return hierarchicalReport, nil
 }
 
 // executeWithStreaming contains the common streaming execution pattern

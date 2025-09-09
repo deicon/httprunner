@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/deicon/httprunner/metrics"
 )
 
 // FileReporter generates reports from streamed result files
@@ -44,6 +46,7 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 		EndTime:                  time.Now(),
 		MinResponseTime:          time.Hour, // Initialize to high value
 		MaxResponseTime:          0,
+		MetricsSummaries:         make(map[string]metrics.MetricSummary),
 	}
 
 	scanner := bufio.NewScanner(file)
@@ -411,6 +414,7 @@ func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime tim
 		RequestDetails:           summary.requestDetails,
 		StartTime:                startTime,
 		EndTime:                  time.Now(),
+		MetricsSummaries:         make(map[string]metrics.MetricSummary),
 	}
 
 	// Calculate average response time
