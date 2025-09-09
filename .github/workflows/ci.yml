@@ -120,22 +120,30 @@ jobs:
     - name: Install dependencies
       run: make deps
       
-    - name: Build binary
+    - name: Build binaries
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
         CGO_ENABLED: 0
       run: |
         VERSION=$(git describe --tags --always --dirty)
-        BINARY_NAME=httprunner-${{ matrix.name }}${{ matrix.ext }}
         mkdir -p build
-        go build -ldflags "-X main.version=${VERSION} -s -w" -o build/${BINARY_NAME}
+        
+        # Build httprunner
+        HTTPRUNNER_NAME=httprunner-${{ matrix.name }}${{ matrix.ext }}
+        go build -ldflags "-X main.version=${VERSION} -s -w" -o build/${HTTPRUNNER_NAME} ./cmd/httprunner
+        
+        # Build harparser
+        HARPARSER_NAME=harparser-${{ matrix.name }}${{ matrix.ext }}
+        go build -ldflags "-X main.version=${VERSION} -s -w" -o build/${HARPARSER_NAME} ./cmd/harparser
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: httprunner-${{ matrix.name }}
-        path: build/httprunner-${{ matrix.name }}${{ matrix.ext }}
+        name: binaries-${{ matrix.name }}
+        path: |
+          build/httprunner-${{ matrix.name }}${{ matrix.ext }}
+          build/harparser-${{ matrix.name }}${{ matrix.ext }}
         retention-days: 30
 
   release:
@@ -164,7 +172,7 @@ jobs:
     - name: Create release archives
       run: |
         cd build
-        for file in httprunner-*; do
+        for file in httprunner-* harparser-*; do
           if [[ "$file" == *".exe" ]]; then
             # Windows executable - create zip
             zip "${file%.exe}.zip" "$file"

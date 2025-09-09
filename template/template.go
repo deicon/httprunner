@@ -9,8 +9,10 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/deicon/httprunner/reporting"
 	"github.com/dop251/goja"
 )
 
@@ -114,12 +116,15 @@ func (gs *GlobalStore) GetAll() map[string]interface{} {
 // TemplateEngine handles template rendering and JavaScript execution
 type Engine struct {
 	globalStore *GlobalStore
+	checks      []reporting.CheckResult
+	checksMu    sync.Mutex
 }
 
 // NewTemplateEngine creates a new template engine
 func NewTemplateEngine() *Engine {
 	return &Engine{
 		globalStore: NewGlobalStore(),
+		checks:      make([]reporting.CheckResult, 0),
 	}
 }
 
@@ -133,6 +138,7 @@ func NewTemplateEngineWithEnvFile(envFile string) (*Engine, error) {
 	}
 	return &Engine{
 		globalStore: store,
+		checks:      make([]reporting.CheckResult, 0),
 	}, nil
 }
 
@@ -169,6 +175,19 @@ func (te *Engine) ExecuteScript(script string, responseBody string) error {
 		return te.globalStore.Get(key)
 	})
 
+	// Add check method
+	_ = clientObj.Set("check", func(name string, checkHandler func() bool, failureMessage string) {
+		success := checkHandler()
+		te.checksMu.Lock()
+		defer te.checksMu.Unlock()
+		te.checks = append(te.checks, reporting.CheckResult{
+			Name:           name,
+			Success:        success,
+			FailureMessage: failureMessage,
+			Timestamp:      time.Now(),
+		})
+	})
+
 	_ = clientObj.Set("global", globalObj)
 	_ = vm.Set("client", clientObj)
 
@@ -202,4 +221,23 @@ func (te *Engine) ExecuteScript(script string, responseBody string) error {
 // GetGlobalStore returns the global store for external access
 func (te *Engine) GetGlobalStore() *GlobalStore {
 	return te.globalStore
+}
+
+// GetChecks returns the current checks and clears the internal list
+func (te *Engine) GetChecks() []reporting.CheckResult {
+	te.checksMu.Lock()
+	defer te.checksMu.Unlock()
+
+	checks := make([]reporting.CheckResult, len(te.checks))
+	copy(checks, te.checks)
+	te.checks = te.checks[:0] // Clear the slice
+
+	return checks
+}
+
+// ClearChecks clears the internal check results
+func (te *Engine) ClearChecks() {
+	te.checksMu.Lock()
+	defer te.checksMu.Unlock()
+	te.checks = te.checks[:0]
 }

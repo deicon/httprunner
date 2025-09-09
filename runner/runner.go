@@ -241,14 +241,14 @@ func (r *Runner) executeWithStreaming() error {
 	return nil
 }
 
-func (r *Runner) execute(req chttp.Request, te *template.Engine, goroutineID, iterationID int) reporting.RequestResult {
+func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, iterationID int) reporting.RequestResult {
 	result := reporting.RequestResult{
-		Name:        req.Name,
-		Verb:        req.Verb,
-		URL:         req.URL,
-		Timestamp:   time.Now(),
-		GoroutineID: goroutineID,
-		IterationID: iterationID,
+		Name:          req.Name,
+		Verb:          req.Verb,
+		URL:           req.URL,
+		Timestamp:     time.Now(),
+		VirtualUserID: virtualUserId,
+		IterationID:   iterationID,
 	}
 
 	// Execute pre-request script if present
@@ -358,6 +358,9 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, goroutineID, it
 			return result
 		}
 	}
+
+	// Collect check results from the template engine
+	result.Checks = te.GetChecks()
 
 	return result
 }

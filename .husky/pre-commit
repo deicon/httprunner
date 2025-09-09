@@ -1,0 +1,32 @@
+
+# Get list of staged Go files
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$')
+
+# If no Go files are staged, exit early
+if [ -z "$STAGED_GO_FILES" ]; then
+  echo "No Go files staged, skipping pre-commit hooks"
+  exit 0
+fi
+
+echo "Running pre-commit hooks on Go files..."
+
+# Run make fmt
+echo "Running make fmt..."
+make fmt
+if [ $? -ne 0 ]; then
+  echo "make fmt failed"
+  exit 1
+fi
+
+# Run make lint
+echo "Running make lint..."
+make lint
+if [ $? -ne 0 ]; then
+  echo "make lint failed"
+  exit 1
+fi
+
+# Add any changes made by fmt back to the staging area
+git add $STAGED_GO_FILES
+
+echo "Pre-commit hooks completed successfully"

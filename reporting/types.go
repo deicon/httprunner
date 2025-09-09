@@ -2,18 +2,36 @@ package reporting
 
 import "time"
 
+// CheckResult represents the result of a single check
+type CheckResult struct {
+	Name           string
+	Success        bool
+	FailureMessage string
+	Timestamp      time.Time
+}
+
+// CheckSummary contains aggregated check results
+type CheckSummary struct {
+	Name            string
+	TotalRuns       int
+	SuccessfulRuns  int
+	FailedRuns      int
+	FailureMessages []string
+}
+
 // RequestResult represents the outcome of a single HTTP request
 type RequestResult struct {
-	Name         string
-	Verb         string
-	URL          string
-	StatusCode   int
-	ResponseTime time.Duration
-	Success      bool
-	Error        string
-	Timestamp    time.Time
-	GoroutineID  int
-	IterationID  int
+	Name          string
+	Verb          string
+	URL           string
+	StatusCode    int
+	ResponseTime  time.Duration
+	Success       bool
+	Error         string
+	Timestamp     time.Time
+	VirtualUserID int
+	IterationID   int
+	Checks        []CheckResult
 }
 
 // Report contains aggregated statistics from all request executions
@@ -29,6 +47,10 @@ type Report struct {
 	RequestDetails           []RequestResult
 	StartTime                time.Time
 	EndTime                  time.Time
+	CheckSummaries           map[string]CheckSummary
+	TotalChecks              int
+	SuccessfulChecks         int
+	FailedChecks             int
 }
 
 // IterationReport contains results for a single iteration
@@ -62,21 +84,21 @@ type GoroutineReport struct {
 
 // HierarchicalReport provides detailed breakdown by goroutines and iterations
 type HierarchicalReport struct {
-	Summary              Report
-	Goroutines           []GoroutineReport
-	TotalGoroutines      int
-	SuccessfulGoroutines int
-	FailedGoroutines     int
+	Summary                Report
+	VirtualUserReports     []GoroutineReport
+	TotalVirtualUsers      int
+	SuccessfulVirtualUsers int
+	FailedVirtualUsers     int
 }
 
 // ReportDetailLevel controls how much detail to show in reports
 type ReportDetailLevel string
 
 const (
-	DetailSummary   ReportDetailLevel = "summary"   // Only overall summary
-	DetailGoroutine ReportDetailLevel = "goroutine" // Summary + goroutine breakdown
-	DetailIteration ReportDetailLevel = "iteration" // Summary + goroutine + iteration breakdown
-	DetailFull      ReportDetailLevel = "full"      // All levels + individual requests
+	DetailSummary     ReportDetailLevel = "summary"     // Only overall summary
+	DetailVirtualuser ReportDetailLevel = "virtualuser" // Summary + virtualuser breakdown
+	DetailIteration   ReportDetailLevel = "iteration"   // Summary + virtualuser + iteration breakdown
+	DetailFull        ReportDetailLevel = "full"        // All levels + individual requests
 )
 
 // ReportFormat defines the output format for reports

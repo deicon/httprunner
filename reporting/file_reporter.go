@@ -38,6 +38,7 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 	report := &Report{
 		ResponseTimeDistribution: make(map[string]int),
 		ErrorBreakdown:           make(map[string]int),
+		CheckSummaries:           make(map[string]CheckSummary),
 		StartTime:                startTime,
 		EndTime:                  time.Now(),
 		MinResponseTime:          time.Hour, // Initialize to high value
@@ -90,6 +91,45 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 		} else {
 			report.ResponseTimeDistribution[">1s"]++
 		}
+
+		// Process checks
+		for _, check := range result.Checks {
+			report.TotalChecks++
+			if check.Success {
+				report.SuccessfulChecks++
+			} else {
+				report.FailedChecks++
+			}
+
+			// Update check summary
+			checkSummary, exists := report.CheckSummaries[check.Name]
+			if !exists {
+				checkSummary = CheckSummary{
+					Name:            check.Name,
+					FailureMessages: make([]string, 0),
+				}
+			}
+
+			checkSummary.TotalRuns++
+			if check.Success {
+				checkSummary.SuccessfulRuns++
+			} else {
+				checkSummary.FailedRuns++
+				// Add failure message if not already present
+				found := false
+				for _, msg := range checkSummary.FailureMessages {
+					if msg == check.FailureMessage {
+						found = true
+						break
+					}
+				}
+				if !found && check.FailureMessage != "" {
+					checkSummary.FailureMessages = append(checkSummary.FailureMessages, check.FailureMessage)
+				}
+			}
+
+			report.CheckSummaries[check.Name] = checkSummary
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -125,20 +165,20 @@ func (fr *FileReporter) generateHierarchicalReportStreaming(startTime time.Time)
 
 	// Build hierarchical report from goroutine data
 	hierarchical := &HierarchicalReport{
-		Summary:         summaryReport,
-		Goroutines:      make([]GoroutineReport, 0, len(goroutineData)),
-		TotalGoroutines: len(goroutineData),
+		Summary:            summaryReport,
+		VirtualUserReports: make([]GoroutineReport, 0, len(goroutineData)),
+		TotalVirtualUsers:  len(goroutineData),
 	}
 
 	for goroutineID, iterations := range goroutineData {
 		goroutineReport := fr.buildGoroutineReportFromData(goroutineID, iterations)
-		hierarchical.Goroutines = append(hierarchical.Goroutines, goroutineReport)
+		hierarchical.VirtualUserReports = append(hierarchical.VirtualUserReports, goroutineReport)
 
 		// Count successful goroutines
 		if goroutineReport.SuccessfulIterations > 0 {
-			hierarchical.SuccessfulGoroutines++
+			hierarchical.SuccessfulVirtualUsers++
 		} else {
-			hierarchical.FailedGoroutines++
+			hierarchical.FailedVirtualUsers++
 		}
 	}
 
@@ -155,6 +195,10 @@ type summaryData struct {
 	maxResponseTime          time.Duration
 	responseTimeDistribution map[string]int
 	errorBreakdown           map[string]int
+	checkSummaries           map[string]CheckSummary
+	totalChecks              int
+	successfulChecks         int
+	failedChecks             int
 }
 
 // iterationData holds aggregated data for an iteration
@@ -188,6 +232,7 @@ func (fr *FileReporter) collectAllDataInSinglePass() (*summaryData, map[int]*gor
 		minResponseTime:          time.Hour, // Initialize to high value
 		responseTimeDistribution: make(map[string]int),
 		errorBreakdown:           make(map[string]int),
+		checkSummaries:           make(map[string]CheckSummary),
 	}
 
 	// Initialize goroutine data map
@@ -258,26 +303,67 @@ func (fr *FileReporter) updateSummaryData(summary *summaryData, result RequestRe
 	} else {
 		summary.responseTimeDistribution[">1s"]++
 	}
+
+	// Process checks
+	for _, check := range result.Checks {
+		summary.totalChecks++
+		if check.Success {
+			summary.successfulChecks++
+		} else {
+			summary.failedChecks++
+		}
+
+		// Update check summary
+		checkSummary, exists := summary.checkSummaries[check.Name]
+		if !exists {
+			checkSummary = CheckSummary{
+				Name:            check.Name,
+				FailureMessages: make([]string, 0),
+			}
+		}
+
+		checkSummary.TotalRuns++
+		if check.Success {
+			checkSummary.SuccessfulRuns++
+		} else {
+			checkSummary.FailedRuns++
+			if check.FailureMessage != "" && !containsString(checkSummary.FailureMessages, check.FailureMessage) {
+				checkSummary.FailureMessages = append(checkSummary.FailureMessages, check.FailureMessage)
+			}
+		}
+
+		summary.checkSummaries[check.Name] = checkSummary
+	}
+}
+
+// containsString checks if a string slice contains a specific string
+func containsString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
 
 // updateGoroutineData updates the goroutine data with a single result
 func (fr *FileReporter) updateGoroutineData(goroutines map[int]*goroutineData, result RequestResult) {
 	// Initialize goroutine if needed
-	if goroutines[result.GoroutineID] == nil {
-		goroutines[result.GoroutineID] = &goroutineData{
+	if goroutines[result.VirtualUserID] == nil {
+		goroutines[result.VirtualUserID] = &goroutineData{
 			iterations: make(map[int]*iterationData),
 		}
 	}
 
 	// Initialize iteration if needed
-	iteration := goroutines[result.GoroutineID].iterations[result.IterationID]
+	iteration := goroutines[result.VirtualUserID].iterations[result.IterationID]
 	if iteration == nil {
 		iteration = &iterationData{
 			iterationID: result.IterationID,
 			startTime:   result.Timestamp,
 			endTime:     result.Timestamp,
 		}
-		goroutines[result.GoroutineID].iterations[result.IterationID] = iteration
+		goroutines[result.VirtualUserID].iterations[result.IterationID] = iteration
 	}
 
 	// Update iteration data
@@ -309,6 +395,10 @@ func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime tim
 		MaxResponseTime:          summary.maxResponseTime,
 		ResponseTimeDistribution: summary.responseTimeDistribution,
 		ErrorBreakdown:           summary.errorBreakdown,
+		CheckSummaries:           summary.checkSummaries,
+		TotalChecks:              summary.totalChecks,
+		SuccessfulChecks:         summary.successfulChecks,
+		FailedChecks:             summary.failedChecks,
 		StartTime:                startTime,
 		EndTime:                  time.Now(),
 	}

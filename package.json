@@ -1,0 +1,20 @@
+{
+  "name": "httprunner",
+  "version": "1.0.0",
+  "description": "A Go-based command-line tool for running multiple, parallel HTTP requests",
+  "main": "index.js",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "keywords": [
+    "go",
+    "http",
+    "testing",
+    "load-testing"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

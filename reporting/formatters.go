@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -61,6 +62,30 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 		buf.WriteString("\n")
 	}
 
+	// Check results summary
+	if len(report.CheckSummaries) > 0 {
+		buf.WriteString("Check Results:\n")
+		buf.WriteString(fmt.Sprintf("Total Checks: %d\n", report.TotalChecks))
+		buf.WriteString(fmt.Sprintf("Successful Checks: %d\n", report.SuccessfulChecks))
+		buf.WriteString(fmt.Sprintf("Failed Checks: %d\n", report.FailedChecks))
+
+		if report.TotalChecks > 0 {
+			checkSuccessRate := float64(report.SuccessfulChecks) / float64(report.TotalChecks) * 100
+			buf.WriteString(fmt.Sprintf("Check Success Rate: %.1f%%\n", checkSuccessRate))
+		}
+		buf.WriteString("\n")
+
+		buf.WriteString("Check Breakdown:\n")
+		for checkName, summary := range report.CheckSummaries {
+			buf.WriteString(fmt.Sprintf("- %s: %d runs (%d successful, %d failed)\n",
+				checkName, summary.TotalRuns, summary.SuccessfulRuns, summary.FailedRuns))
+			if len(summary.FailureMessages) > 0 {
+				buf.WriteString(fmt.Sprintf("  Failure reasons: %v\n", summary.FailureMessages))
+			}
+		}
+		buf.WriteString("\n")
+	}
+
 	// Request details (limited to first 10 for console)
 	if len(report.RequestDetails) > 0 {
 		buf.WriteString("Request Details (showing first 10):\n")
@@ -71,12 +96,25 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 
 		for i := 0; i < limit; i++ {
 			req := report.RequestDetails[i]
-			status := "SUCCESS"
+			status := fmt.Sprintf("%d ✓", req.StatusCode)
 			if !req.Success {
 				status = fmt.Sprintf("ERROR: %s", req.Error)
 			}
-			buf.WriteString(fmt.Sprintf("%d. %s %s - %s - %v\n",
-				i+1, req.Verb, req.URL, status, req.ResponseTime))
+
+			// Build check failure info for this request
+			checkFailureInfo := ""
+			failedChecks := make([]string, 0)
+			for _, check := range req.Checks {
+				if !check.Success {
+					failedChecks = append(failedChecks, check.FailureMessage)
+				}
+			}
+			if len(failedChecks) > 0 {
+				checkFailureInfo = fmt.Sprintf("    %s Check Failed (Failures: %s)", req.Timestamp.Format("15:04:05.000"), strings.Join(failedChecks, ", "))
+			}
+
+			buf.WriteString(fmt.Sprintf("  %d    %s    %s    %s    %s    %.3f ms%s\n",
+				i+1, req.Name, req.Verb, req.URL, status, float64(req.ResponseTime.Nanoseconds())/1000000.0, checkFailureInfo))
 		}
 
 		if len(report.RequestDetails) > limit {
@@ -152,23 +190,66 @@ const htmlTemplate = `<!DOCTYPE html>
     </div>
     {{end}}
 
+    {{if .CheckSummaries}}
+    <div class="summary">
+        <div class="metric"><strong>Total Checks:</strong> {{.TotalChecks}}</div>
+        <div class="metric"><strong>Successful Checks:</strong> <span class="success">{{.SuccessfulChecks}}</span></div>
+        <div class="metric"><strong>Failed Checks:</strong> <span class="error">{{.FailedChecks}}</span></div>
+        <div class="metric"><strong>Check Success Rate:</strong> {{if gt .TotalChecks 0}}{{printf "%.1f" .CheckSuccessRate}}%{{else}}N/A{{end}}</div>
+    </div>
+
+    <div class="chart">
+        <div class="errors">
+            <h3>Check Results</h3>
+            <ul>
+                {{range $name, $summary := .CheckSummaries}}
+                <li>
+                    <strong>{{$name}}</strong>: {{$summary.TotalRuns}} runs 
+                    ({{$summary.SuccessfulRuns}} successful, {{$summary.FailedRuns}} failed)
+                    {{if gt (len $summary.FailureMessages) 0}}
+                    <br><small>Failure reasons: {{range $i, $msg := $summary.FailureMessages}}{{if $i}}, {{end}}{{$msg}}{{end}}</small>
+                    {{end}}
+                </li>
+                {{end}}
+            </ul>
+        </div>
+    </div>
+    {{end}}
+
     <h3>Request Details</h3>
     <table>
         <tr>
             <th>#</th>
+            <th>Name</th>
             <th>Method</th>
             <th>URL</th>
             <th>Status</th>
             <th>Response Time</th>
+            <th>Checks</th>
             <th>Timestamp</th>
         </tr>
         {{range $index, $req := .RequestDetails}}
         <tr>
             <td>{{add $index 1}}</td>
+            <td>{{$req.Name}}</td>
             <td>{{$req.Verb}}</td>
             <td>{{$req.URL}}</td>
             <td>{{if $req.Success}}<span class="success">{{$req.StatusCode}} OK</span>{{else}}<span class="error">{{$req.Error}}</span>{{end}}</td>
             <td>{{$req.ResponseTime}}</td>
+            <td>
+                {{if gt (len $req.Checks) 0}}
+                    {{range $checkIndex, $check := $req.Checks}}
+                        {{if gt $checkIndex 0}}<br>{{end}}
+                        {{if $check.Success}}
+                            <span class="success">✓ {{$check.Name}}</span>
+                        {{else}}
+                            <span class="error">✗ {{$check.Name}}: {{$check.FailureMessage}}</span>
+                        {{end}}
+                    {{end}}
+                {{else}}
+                    -
+                {{end}}
+            </td>
             <td>{{$req.Timestamp.Format "2006-01-02 15:04:05"}}</td>
         </tr>
         {{end}}
@@ -187,8 +268,9 @@ func (f *HTMLFormatter) Format(report *Report) (string, error) {
 	// Prepare template data
 	data := struct {
 		*Report
-		SuccessRate   float64
-		TotalDuration time.Duration
+		SuccessRate      float64
+		CheckSuccessRate float64
+		TotalDuration    time.Duration
 	}{
 		Report:        report,
 		TotalDuration: report.EndTime.Sub(report.StartTime),
@@ -196,6 +278,10 @@ func (f *HTMLFormatter) Format(report *Report) (string, error) {
 
 	if report.TotalRequests > 0 {
 		data.SuccessRate = float64(report.SuccessfulRequests) / float64(report.TotalRequests) * 100
+	}
+
+	if report.TotalChecks > 0 {
+		data.CheckSuccessRate = float64(report.SuccessfulChecks) / float64(report.TotalChecks) * 100
 	}
 
 	var buf bytes.Buffer
@@ -214,13 +300,22 @@ func (f *CSVFormatter) Format(report *Report) (string, error) {
 	writer := csv.NewWriter(&buf)
 
 	// Write header
-	header := []string{"Index", "Name", "Method", "URL", "Success", "StatusCode", "ResponseTime", "Error", "Timestamp"}
+	header := []string{"Index", "Name", "Method", "URL", "Success", "StatusCode", "ResponseTime", "Error", "CheckFailures", "Timestamp"}
 	if err := writer.Write(header); err != nil {
 		return "", err
 	}
 
 	// Write data
 	for i, req := range report.RequestDetails {
+		// Collect failed check messages
+		var failedChecks []string
+		for _, check := range req.Checks {
+			if !check.Success && check.FailureMessage != "" {
+				failedChecks = append(failedChecks, check.FailureMessage)
+			}
+		}
+		checkFailuresStr := strings.Join(failedChecks, "; ")
+
 		record := []string{
 			strconv.Itoa(i + 1),
 			req.Name,
@@ -230,6 +325,7 @@ func (f *CSVFormatter) Format(report *Report) (string, error) {
 			strconv.Itoa(req.StatusCode),
 			req.ResponseTime.String(),
 			req.Error,
+			checkFailuresStr,
 			req.Timestamp.Format(time.RFC3339),
 		}
 		if err := writer.Write(record); err != nil {
@@ -256,6 +352,10 @@ func (f *JSONFormatter) Format(report *Report) (string, error) {
 			"successfulRequests":  report.SuccessfulRequests,
 			"failedRequests":      report.FailedRequests,
 			"successRate":         0.0,
+			"totalChecks":         report.TotalChecks,
+			"successfulChecks":    report.SuccessfulChecks,
+			"failedChecks":        report.FailedChecks,
+			"checkSuccessRate":    0.0,
 			"averageResponseTime": report.AverageResponseTime.String(),
 			"minResponseTime":     report.MinResponseTime.String(),
 			"maxResponseTime":     report.MaxResponseTime.String(),
@@ -265,11 +365,16 @@ func (f *JSONFormatter) Format(report *Report) (string, error) {
 		},
 		"responseTimeDistribution": report.ResponseTimeDistribution,
 		"errorBreakdown":           report.ErrorBreakdown,
+		"checkSummaries":           report.CheckSummaries,
 		"requestDetails":           report.RequestDetails,
 	}
 
 	if report.TotalRequests > 0 {
 		output["summary"].(map[string]interface{})["successRate"] = float64(report.SuccessfulRequests) / float64(report.TotalRequests) * 100
+	}
+
+	if report.TotalChecks > 0 {
+		output["summary"].(map[string]interface{})["checkSuccessRate"] = float64(report.SuccessfulChecks) / float64(report.TotalChecks) * 100
 	}
 
 	jsonBytes, err := json.MarshalIndent(output, "", "  ")
@@ -336,11 +441,11 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 	buf.WriteString("HTTP Request Report - Summary\n")
 	buf.WriteString("============================\n\n")
 
-	buf.WriteString(fmt.Sprintf("Total Goroutines: %d\n", report.TotalGoroutines))
-	buf.WriteString(fmt.Sprintf("Successful Goroutines: %d\n", report.SuccessfulGoroutines))
-	buf.WriteString(fmt.Sprintf("Failed Goroutines: %d\n", report.FailedGoroutines))
-	if report.TotalGoroutines > 0 {
-		successRate := float64(report.SuccessfulGoroutines) / float64(report.TotalGoroutines) * 100
+	buf.WriteString(fmt.Sprintf("Total VirtualUserReports: %d\n", report.TotalVirtualUsers))
+	buf.WriteString(fmt.Sprintf("Successful VirtualUserReports: %d\n", report.SuccessfulVirtualUsers))
+	buf.WriteString(fmt.Sprintf("Failed VirtualUserReports: %d\n", report.FailedVirtualUsers))
+	if report.TotalVirtualUsers > 0 {
+		successRate := float64(report.SuccessfulVirtualUsers) / float64(report.TotalVirtualUsers) * 100
 		buf.WriteString(fmt.Sprintf("Goroutine Success Rate: %.1f%%\n\n", successRate))
 	}
 
@@ -356,12 +461,36 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 	buf.WriteString(fmt.Sprintf("Average Response Time: %v\n", report.Summary.AverageResponseTime))
 	buf.WriteString(fmt.Sprintf("Total Duration: %v\n\n", report.Summary.EndTime.Sub(report.Summary.StartTime)))
 
+	// Check results summary
+	if len(report.Summary.CheckSummaries) > 0 {
+		buf.WriteString("Check Results:\n")
+		buf.WriteString(fmt.Sprintf("Total Checks: %d\n", report.Summary.TotalChecks))
+		buf.WriteString(fmt.Sprintf("Successful Checks: %d\n", report.Summary.SuccessfulChecks))
+		buf.WriteString(fmt.Sprintf("Failed Checks: %d\n", report.Summary.FailedChecks))
+
+		if report.Summary.TotalChecks > 0 {
+			checkSuccessRate := float64(report.Summary.SuccessfulChecks) / float64(report.Summary.TotalChecks) * 100
+			buf.WriteString(fmt.Sprintf("Check Success Rate: %.1f%%\n", checkSuccessRate))
+		}
+		buf.WriteString("\n")
+
+		buf.WriteString("Check Breakdown:\n")
+		for checkName, summary := range report.Summary.CheckSummaries {
+			buf.WriteString(fmt.Sprintf("- %s: %d runs (%d successful, %d failed)\n",
+				checkName, summary.TotalRuns, summary.SuccessfulRuns, summary.FailedRuns))
+			if len(summary.FailureMessages) > 0 {
+				buf.WriteString(fmt.Sprintf("  Failure reasons: %v\n", summary.FailureMessages))
+			}
+		}
+		buf.WriteString("\n")
+	}
+
 	// Show goroutine details if requested
-	if f.DetailLevel == DetailGoroutine || f.DetailLevel == DetailIteration || f.DetailLevel == DetailFull {
+	if f.DetailLevel == DetailVirtualuser || f.DetailLevel == DetailIteration || f.DetailLevel == DetailFull {
 		buf.WriteString("Goroutine Breakdown\n")
 		buf.WriteString("===================\n\n")
 
-		for _, gr := range report.Goroutines {
+		for _, gr := range report.VirtualUserReports {
 			buf.WriteString(fmt.Sprintf("Goroutine %d:\n", gr.GoroutineID))
 			buf.WriteString(fmt.Sprintf("  Total Iterations: %d\n", gr.TotalIterations))
 			buf.WriteString(fmt.Sprintf("  Successful Iterations: %d\n", gr.SuccessfulIterations))
@@ -378,15 +507,29 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 		buf.WriteString("Iteration Breakdown\n")
 		buf.WriteString("===================\n\n")
 
-		for _, gr := range report.Goroutines {
+		for _, gr := range report.VirtualUserReports {
 			if len(gr.Iterations) > 0 {
 				buf.WriteString(fmt.Sprintf("Goroutine %d Iterations:\n", gr.GoroutineID))
 				for _, iter := range gr.Iterations {
+					// Collect failed checks for this iteration
+					failedChecksList := make([]string, 0)
+					for _, request := range iter.RequestResults {
+						for _, check := range request.Checks {
+							if !check.Success {
+								failedChecksList = append(failedChecksList, check.FailureMessage)
+							}
+						}
+					}
+
 					buf.WriteString(fmt.Sprintf("  Iteration %d:\n", iter.IterationID))
 					buf.WriteString(fmt.Sprintf("    Requests: %d (Success: %d, Failed: %d)\n",
 						iter.TotalRequests, iter.SuccessfulRequests, iter.FailedRequests))
 					buf.WriteString(fmt.Sprintf("    Average Response Time: %v\n", iter.AverageResponseTime))
 					buf.WriteString(fmt.Sprintf("    Duration: %v\n", iter.TotalDuration))
+
+					if len(failedChecksList) > 0 {
+						buf.WriteString(fmt.Sprintf("    Check Failures: %s\n", strings.Join(failedChecksList, ", ")))
+					}
 				}
 				buf.WriteString("\n")
 			}
@@ -399,17 +542,30 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 		buf.WriteString("===============\n\n")
 
 		count := 1
-		for _, gr := range report.Goroutines {
+		for _, gr := range report.VirtualUserReports {
 			for _, iter := range gr.Iterations {
 				if len(iter.RequestResults) > 0 {
 					buf.WriteString(fmt.Sprintf("Goroutine %d, Iteration %d:\n", gr.GoroutineID, iter.IterationID))
 					for _, req := range iter.RequestResults {
-						status := "SUCCESS"
+						status := fmt.Sprintf("%d ✓", req.StatusCode)
 						if !req.Success {
 							status = fmt.Sprintf("ERROR: %s", req.Error)
 						}
-						buf.WriteString(fmt.Sprintf("  %d. %s %s - %s - %v\n",
-							count, req.Verb, req.URL, status, req.ResponseTime))
+
+						// Build check failure info for this request
+						checkFailureInfo := ""
+						failedChecks := make([]string, 0)
+						for _, check := range req.Checks {
+							if !check.Success {
+								failedChecks = append(failedChecks, check.FailureMessage)
+							}
+						}
+						if len(failedChecks) > 0 {
+							checkFailureInfo = fmt.Sprintf("    %s Check Failed (Failures: %s)", req.Timestamp.Format("15:04:05.000"), strings.Join(failedChecks, ", "))
+						}
+
+						buf.WriteString(fmt.Sprintf("  %d    %s    %s    %s    %s    %.3f ms%s\n",
+							count, req.Name, req.Verb, req.URL, status, float64(req.ResponseTime.Nanoseconds())/1000000.0, checkFailureInfo))
 						count++
 					}
 					buf.WriteString("\n")
@@ -425,9 +581,9 @@ func (f *HierarchicalFormatter) formatHierarchicalJSON(report *HierarchicalRepor
 	// Create structured JSON based on detail level
 	output := map[string]interface{}{
 		"summary": map[string]interface{}{
-			"totalGoroutines":      report.TotalGoroutines,
-			"successfulGoroutines": report.SuccessfulGoroutines,
-			"failedGoroutines":     report.FailedGoroutines,
+			"totalGoroutines":      report.TotalVirtualUsers,
+			"successfulGoroutines": report.SuccessfulVirtualUsers,
+			"failedGoroutines":     report.FailedVirtualUsers,
 			"totalRequests":        report.Summary.TotalRequests,
 			"successfulRequests":   report.Summary.SuccessfulRequests,
 			"failedRequests":       report.Summary.FailedRequests,
@@ -438,9 +594,9 @@ func (f *HierarchicalFormatter) formatHierarchicalJSON(report *HierarchicalRepor
 		},
 	}
 
-	if f.DetailLevel == DetailGoroutine || f.DetailLevel == DetailIteration || f.DetailLevel == DetailFull {
-		goroutines := make([]map[string]interface{}, 0, len(report.Goroutines))
-		for _, gr := range report.Goroutines {
+	if f.DetailLevel == DetailVirtualuser || f.DetailLevel == DetailIteration || f.DetailLevel == DetailFull {
+		goroutines := make([]map[string]interface{}, 0, len(report.VirtualUserReports))
+		for _, gr := range report.VirtualUserReports {
 			goroutine := map[string]interface{}{
 				"goroutineID":          gr.GoroutineID,
 				"totalIterations":      gr.TotalIterations,
@@ -689,17 +845,17 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
         <h2>📊 Overall Summary</h2>
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-value">{{.TotalGoroutines}}</div>
-                <div class="stat-label">Total Goroutines</div>
+                <div class="stat-value">{{.TotalVirtualUsers}}</div>
+                <div class="stat-label">Total VirtualUserReports</div>
                 <div class="progress-bar">
                     <div class="progress-fill" style="width: 100%;"></div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-value success">{{.SuccessfulGoroutines}}</div>
-                <div class="stat-label">Successful Goroutines</div>
+                <div class="stat-value success">{{.SuccessfulVirtualUsers}}</div>
+                <div class="stat-label">Successful VirtualUserReports</div>
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: {{if gt .TotalGoroutines 0}}{{printf "%.0f" (mul (div (float64 .SuccessfulGoroutines) (float64 .TotalGoroutines)) 100.0)}}{{else}}0{{end}}%;"></div>
+                    <div class="progress-fill" style="width: {{if gt .TotalVirtualUsers 0}}{{printf "%.0f" (mul (div (float64 .SuccessfulVirtualUsers) (float64 .TotalVirtualUsers)) 100.0)}}{{else}}0{{end}}%;"></div>
                 </div>
             </div>
             <div class="stat-card">
@@ -733,14 +889,53 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
         </div>
     </div>
 
-    {{if or (eq .DetailLevel "goroutine") (eq .DetailLevel "iteration") (eq .DetailLevel "full")}}
+    {{if gt .Summary.TotalChecks 0}}
+    <div class="summary">
+        <h2>✅ Check Results</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{.Summary.TotalChecks}}</div>
+                <div class="stat-label">Total Checks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value success">{{.Summary.SuccessfulChecks}}</div>
+                <div class="stat-label">Successful Checks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value error">{{.Summary.FailedChecks}}</div>
+                <div class="stat-label">Failed Checks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{if gt .Summary.TotalChecks 0}}{{printf "%.1f" (mul (div (float64 .Summary.SuccessfulChecks) (float64 .Summary.TotalChecks)) 100.0)}}%{{else}}N/A{{end}}</div>
+                <div class="stat-label">Check Success Rate</div>
+            </div>
+        </div>
+        
+        <button class="collapsible" onclick="toggleCollapsible(this)" style="background-color: #28a745; margin: 15px 0;">
+            📋 Check Breakdown
+        </button>
+        <div class="content">
+            {{range $name, $summary := .Summary.CheckSummaries}}
+            <div style="padding: 10px; border-left: 4px solid {{if gt $summary.FailedRuns 0}}#dc3545{{else}}#28a745{{end}}; margin: 5px 0; background: #f8f9fa;">
+                <strong>{{$name}}</strong><br>
+                <small>{{$summary.TotalRuns}} runs ({{$summary.SuccessfulRuns}} successful, {{$summary.FailedRuns}} failed)</small>
+                {{if gt (len $summary.FailureMessages) 0}}
+                <br><small style="color: #dc3545;"><strong>Failures:</strong> {{range $i, $msg := $summary.FailureMessages}}{{if $i}}, {{end}}{{$msg}}{{end}}</small>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+
+    {{if or (eq .DetailLevel "virtualuser") (eq .DetailLevel "iteration") (eq .DetailLevel "full")}}
     <button class="collapsible" onclick="toggleCollapsible(this)">
-        🔧 Goroutine Breakdown ({{len .Goroutines}} goroutines)
+        🔧 Goroutine Breakdown ({{len .VirtualUserReports}} goroutines)
     </button>
     <div class="content">
-        {{range $goroutineIndex, $goroutine := .Goroutines}}
+        {{range $goroutineIndex, $goroutine := .VirtualUserReports}}
         <div class="goroutine-header">
-            <strong>Goroutine {{$goroutine.GoroutineID}}</strong>
+            <strong>VirtualUser {{$goroutine.GoroutineID}}</strong>
             - {{$goroutine.TotalRequests}} requests 
             - {{printf "%.1f" (mul (div (float64 $goroutine.SuccessfulRequests) (float64 $goroutine.TotalRequests)) 100.0)}}% success rate
             - Avg: {{$goroutine.AverageResponseTime}}
@@ -792,6 +987,7 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
                             <th>URL</th>
                             <th>Status</th>
                             <th>Response Time</th>
+                            <th>Checks</th>
                             <th>Timestamp</th>
                         </tr>
                         {{range $requestIndex, $request := $iteration.RequestResults}}
@@ -808,6 +1004,20 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
                                 {{end}}
                             </td>
                             <td>{{$request.ResponseTime}}</td>
+                            <td>
+                                {{if gt (len $request.Checks) 0}}
+                                    {{range $checkIndex, $check := $request.Checks}}
+                                        {{if gt $checkIndex 0}}<br>{{end}}
+                                        {{if $check.Success}}
+                                            <span class="success">✓ {{$check.Name}}</span>
+                                        {{else}}
+                                            <span class="error">✗ {{$check.Name}}: {{$check.FailureMessage}}</span>
+                                        {{end}}
+                                    {{end}}
+                                {{else}}
+                                    -
+                                {{end}}
+                            </td>
                             <td class="timestamp">{{$request.Timestamp.Format "15:04:05.000"}}</td>
                         </tr>
                         {{end}}
@@ -843,6 +1053,20 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
 			return a / b
 		},
 		"float64": func(i int) float64 { return float64(i) },
+		"collectFailedChecks": func(requests []RequestResult) string {
+			var failedChecks []string
+			for _, request := range requests {
+				for _, check := range request.Checks {
+					if !check.Success {
+						failedChecks = append(failedChecks, check.FailureMessage)
+					}
+				}
+			}
+			if len(failedChecks) > 0 {
+				return strings.Join(failedChecks, ", ")
+			}
+			return ""
+		},
 	}).Parse(hierarchicalHTMLTemplate)
 	if err != nil {
 		return "", err

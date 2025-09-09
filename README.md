@@ -28,7 +28,7 @@ github.com/deicon/httprunner/
 
 ### Parameters
 #### Core Parameters
-- `-t n`: Number of parallel goroutines (default: 1)
+- `-t n`: Number of parallel virtualusers (default: 1)
 - `-i n`: Number of iterations (default: 1)  
 - `-d n`: Delay between iterations in milliseconds (default: 0)
 - `-f filename`: .http file containing HTTP requests (required)

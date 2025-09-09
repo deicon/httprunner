@@ -36,15 +36,23 @@ build-all: clean
 	GOOS=linux GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-386 ./cmd/httprunner
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/httprunner
 	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/httprunner
+	GOOS=linux GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-linux-386 ./cmd/harparser
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-linux-amd64 ./cmd/harparser
+	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-linux-arm64 ./cmd/harparser
 	
 	# Windows
 	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-386.exe ./cmd/httprunner
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/httprunner
 	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-arm64.exe ./cmd/httprunner
+	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-386.exe ./cmd/harparser
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-amd64.exe ./cmd/harparser
+	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-arm64.exe ./cmd/harparser
 	
 	# macOS
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/httprunner
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/httprunner
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-darwin-amd64 ./cmd/harparser
+	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-darwin-arm64 ./cmd/harparser
 
 # Install dependencies
 .PHONY: deps
