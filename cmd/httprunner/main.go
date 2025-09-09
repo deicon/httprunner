@@ -12,11 +12,6 @@ import (
 	"github.com/deicon/httprunner/runner"
 )
 
-const (
-	// StreamingThreshold is the minimum number of total operations to automatically enable streaming mode
-	StreamingThreshold = 10000
-)
-
 func main() {
 	// Command line flags
 	concurrency := flag.Int("u", 1, "Number of parallel virtual parallel users")
@@ -24,21 +19,14 @@ func main() {
 	delay := flag.Int("d", 0, "Delay between iterations in milliseconds")
 	requestFile := flag.String("f", "", ".http file containing http requests")
 	envFile := flag.String("e", "", ".env file containing environment variables")
-	reportFormat := flag.String("report", "html", "Report format: console, html, csv, json")
-	reportOutput := flag.String("output", "", "Output directory for streaming results and reports (enables streaming mode)")
-	reportDetail := flag.String("detail", "full", "Report detail level: summary, goroutine, iteration, full")
-	streaming := flag.Bool("stream", false, "Enable streaming mode to reduce memory usage (requires -output)")
+	reportFormat := flag.String("report", "console", "Report format: console, html, csv, json")
+	reportOutput := flag.String("output", "results", "Output directory for results and reports")
+	reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
 
 	flag.Parse()
 
 	if *requestFile == "" {
 		fmt.Println("Error: -f flag is required")
-		os.Exit(1)
-	}
-
-	// Validate streaming mode requirements
-	if *streaming && *reportOutput == "" {
-		fmt.Println("Error: -output directory is required when using streaming mode (-stream)")
 		os.Exit(1)
 	}
 
@@ -70,79 +58,39 @@ func main() {
 
 	var r *runner.Runner
 
-	// Determine if we should use streaming mode (based on -stream flag or large workload)
-	useStreaming := *streaming || shouldUseStreaming(*concurrency, *iterations, len(requests))
-
-	if useStreaming {
-		// Use streaming runner for memory efficiency
-		outputDir := *reportOutput
-		if outputDir == "" {
-			outputDir = "results" // default output directory for auto-streaming
-		}
-
-		if *envFile != "" {
-			r, err = runner.NewStreamingRunnerWithEnvFile(*concurrency, *iterations, *delay, requests, *envFile, outputDir)
-		} else {
-			r, err = runner.NewStreamingRunner(*concurrency, *iterations, *delay, requests, outputDir)
-		}
-		if err != nil {
-			fmt.Printf("Error creating streaming runner: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("Using streaming mode - results will be written to: %s\n", outputDir)
+	// Always use streaming mode
+	if *envFile != "" {
+		r, err = runner.NewRunnerWithEnvFile(*concurrency, *iterations, *delay, requests, *envFile, *reportOutput)
 	} else {
-		// Use traditional in-memory runner
-		if *envFile != "" {
-			r, err = runner.NewRunnerWithEnvFile(*concurrency, *iterations, *delay, requests, *envFile)
-			if err != nil {
-				fmt.Printf("Error loading env file: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
-			r = runner.NewRunner(*concurrency, *iterations, *delay, requests)
-		}
+		r, err = runner.NewRunner(*concurrency, *iterations, *delay, requests, *reportOutput)
+	}
+	if err != nil {
+		fmt.Printf("Error creating streaming runner: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Generate appropriate report based on detail level and runner type
+	// Generate appropriate report based on detail level
 	var reportContent string
 
-	if useStreaming {
-		// Use streaming execution
-		if detailLevel == reporting.DetailSummary {
-			report, streamErr := r.RunStreaming()
-			if streamErr != nil {
-				fmt.Printf("Error running streaming execution: %v\n", streamErr)
-				os.Exit(1)
-			}
-			formatter := reporting.GetFormatter(format)
-			reportContent, err = formatter.Format(report)
-		} else {
-			hierarchicalReport, streamErr := r.RunHierarchicalStreaming()
-			if streamErr != nil {
-				fmt.Printf("Error running hierarchical streaming execution: %v\n", streamErr)
-				os.Exit(1)
-			}
-			hierarchicalFormatter := &reporting.HierarchicalFormatter{
-				DetailLevel: detailLevel,
-				Format:      format,
-			}
-			reportContent, err = hierarchicalFormatter.FormatHierarchical(hierarchicalReport)
+	if detailLevel == reporting.DetailSummary {
+		report, streamErr := r.Run()
+		if streamErr != nil {
+			fmt.Printf("Error running execution: %v\n", streamErr)
+			os.Exit(1)
 		}
+		formatter := reporting.GetFormatter(format)
+		reportContent, err = formatter.Format(report)
 	} else {
-		// Use traditional in-memory execution
-		if detailLevel == reporting.DetailSummary {
-			report := r.Run()
-			formatter := reporting.GetFormatter(format)
-			reportContent, err = formatter.Format(report)
-		} else {
-			hierarchicalReport := r.RunHierarchical()
-			hierarchicalFormatter := &reporting.HierarchicalFormatter{
-				DetailLevel: detailLevel,
-				Format:      format,
-			}
-			reportContent, err = hierarchicalFormatter.FormatHierarchical(hierarchicalReport)
+		hierarchicalReport, streamErr := r.RunHierarchical()
+		if streamErr != nil {
+			fmt.Printf("Error running hierarchical execution: %v\n", streamErr)
+			os.Exit(1)
 		}
+		hierarchicalFormatter := &reporting.HierarchicalFormatter{
+			DetailLevel: detailLevel,
+			Format:      format,
+		}
+		reportContent, err = hierarchicalFormatter.FormatHierarchical(hierarchicalReport)
 	}
 
 	if err != nil {
@@ -150,31 +98,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Output report
-	if *reportOutput != "" && !useStreaming {
-		// Generate filename based on format if no extension provided (traditional mode)
-		filename := *reportOutput
-		if filepath.Ext(filename) == "" {
-			switch format {
-			case reporting.FormatHTML:
-				filename += ".html"
-			case reporting.FormatCSV:
-				filename += ".csv"
-			case reporting.FormatJSON:
-				filename += ".json"
-			default:
-				filename += ".txt"
-			}
-		}
-
-		if err := os.WriteFile(filename, []byte(reportContent), 0644); err != nil {
-			fmt.Printf("Error writing report to file: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("\nReport saved to: %s\n", filename)
-	} else if useStreaming && *reportOutput != "" {
-		// In streaming mode, save formatted report to output directory
+	// Output report - always save to file and print to stdout for console format
+	if format == reporting.FormatConsole {
+		// For console format, print to stdout
+		fmt.Print(reportContent)
+	} else {
+		// For other formats, save to file
 		filename := filepath.Join(*reportOutput, "report")
 		switch format {
 		case reporting.FormatHTML:
@@ -193,16 +122,7 @@ func main() {
 		}
 
 		fmt.Printf("\nFormatted report saved to: %s\n", filename)
-		fmt.Printf("Raw results available in: %s/raw-results-*.jsonl\n", *reportOutput)
-	} else {
-		// Print to stdout
-		fmt.Print(reportContent)
 	}
-}
 
-// shouldUseStreaming determines if streaming should be used based on workload size
-func shouldUseStreaming(concurrency, iterations, requestCount int) bool {
-	// Use streaming for large workloads that could consume significant memory
-	totalOperations := concurrency * iterations * requestCount
-	return totalOperations > StreamingThreshold
+	fmt.Printf("Raw results available in: %s/raw-results-*.jsonl\n", *reportOutput)
 }

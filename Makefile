@@ -79,6 +79,7 @@ check: fmt lint test
 .PHONY: dev
 dev:
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/httprunner
+	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/harparser
 
 # Help
 .PHONY: help
