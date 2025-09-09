@@ -1,0 +1,212 @@
+### 
+# @name Performance Baseline Test
+GET https://jsonplaceholder.typicode.com/posts/1
+Accept: application/json
+
+> {%
+// Basic metrics access - get current request metrics
+var currentDuration = client.metrics.getCurrent("http_req_duration");
+var currentReqs = client.metrics.getCurrent("http_reqs");
+
+console.log("Request #" + currentReqs + " took " + currentDuration + "ms");
+
+// Store baseline metrics for comparison
+client.global.set("baseline_duration", currentDuration);
+
+// Use metrics in check functions
+client.check("Baseline Response Time", function() {
+    return currentDuration < 2000; // Should be under 2 seconds
+}, "Initial request should complete within 2 seconds");
+
+client.check("Response Data Validity", function() {
+    return response.body && response.body.id && response.body.title;
+}, "Response should contain id and title");
+%}
+
+### 
+# @name Load Pattern Test
+# Demonstrates metrics aggregation and trend analysis
+POST https://jsonplaceholder.typicode.com/posts
+Content-Type: application/json
+
+{
+  "title": "Load Test Post {{.currentIteration}}",
+  "body": "Testing load patterns with metrics",
+  "userId": 1
+}
+
+> {%
+// Compare current request to baseline
+var currentDuration = client.metrics.getCurrent("http_req_duration");
+var baselineDuration = client.global.get("baseline_duration");
+
+console.log("Current: " + currentDuration + "ms vs Baseline: " + baselineDuration + "ms");
+
+// Get aggregated metrics for trend analysis
+var durationMetrics = client.metrics.get("http_req_duration");
+if (durationMetrics && durationMetrics.count >= 2) {
+    console.log("Performance Trends:");
+    console.log("  Average: " + durationMetrics.average.toFixed(1) + "ms");
+    console.log("  P50: " + durationMetrics.p50.toFixed(1) + "ms");
+    console.log("  P90: " + durationMetrics.p90.toFixed(1) + "ms");
+    console.log("  P95: " + durationMetrics.p95.toFixed(1) + "ms");
+    console.log("  P99: " + durationMetrics.p99.toFixed(1) + "ms");
+}
+
+// Performance regression check
+client.check("Performance Regression", function() {
+    if (baselineDuration && currentDuration) {
+        var regression = ((currentDuration - baselineDuration) / baselineDuration) * 100;
+        console.log("Performance change: " + regression.toFixed(1) + "%");
+        return Math.abs(regression) < 50; // No more than 50% change
+    }
+    return true;
+}, "Performance should not regress significantly");
+
+// Check for performance consistency
+client.check("Performance Consistency", function() {
+    if (durationMetrics && durationMetrics.count >= 5) {
+        var coefficient = (durationMetrics.max - durationMetrics.min) / durationMetrics.average;
+        console.log("Performance variation coefficient: " + coefficient.toFixed(2));
+        return coefficient < 2.0; // Reasonable consistency
+    }
+    return true; // Skip if not enough data
+}, "Response times should be reasonably consistent");
+%}
+
+### 
+# @name Error Rate Monitoring
+# Shows how to use metrics for error monitoring and alerting
+GET https://jsonplaceholder.typicode.com/posts/9999999
+Accept: application/json
+
+> {%
+// Monitor error rates and patterns
+var failedMetrics = client.metrics.get("http_req_failed");
+var totalReqs = client.metrics.getCurrent("http_reqs");
+
+if (failedMetrics) {
+    var failureRate = (failedMetrics.sum / totalReqs) * 100;
+    console.log("Current failure rate: " + failureRate.toFixed(2) + "%");
+    
+    client.check("Error Rate Threshold", function() {
+        return failureRate < 25; // Less than 25% failure rate acceptable for this test
+    }, "Error rate should be within acceptable limits");
+} else {
+    console.log("No failures recorded yet");
+}
+
+// Store error information for analysis
+if (response.body && response.body.error) {
+    client.global.set("last_error", response.body.error);
+}
+%}
+
+### 
+# @name Throughput Analysis
+# Demonstrates throughput and capacity metrics analysis
+GET https://jsonplaceholder.typicode.com/users
+Accept: application/json
+
+> {%
+// Calculate throughput metrics
+var totalReqs = client.metrics.getCurrent("http_reqs");
+var durationMetrics = client.metrics.get("http_req_duration");
+var iterations = client.metrics.getCurrent("iterations");
+
+if (durationMetrics && totalReqs >= 2) {
+    var avgDuration = durationMetrics.average / 1000; // Convert to seconds
+    var throughput = 1 / avgDuration; // requests per second
+    
+    console.log("=== THROUGHPUT ANALYSIS ===");
+    console.log("Total requests: " + totalReqs);
+    console.log("Total iterations: " + (iterations || "N/A"));
+    console.log("Average duration: " + durationMetrics.average.toFixed(1) + "ms");
+    console.log("Estimated throughput: " + throughput.toFixed(2) + " req/s");
+}
+
+// Capacity planning check
+client.check("Throughput Target", function() {
+    if (durationMetrics && durationMetrics.count >= 3) {
+        var avgDuration = durationMetrics.average;
+        var targetThroughput = 1; // 1 req/s minimum
+        var actualThroughput = 1000 / avgDuration; // Convert ms to req/s
+        
+        console.log("Target: " + targetThroughput + " req/s, Actual: " + actualThroughput.toFixed(2) + " req/s");
+        return actualThroughput >= targetThroughput;
+    }
+    return true;
+}, "Should meet minimum throughput requirements");
+%}
+
+### 
+# @name Comprehensive Metrics Report
+# Final test showing complete metrics dashboard
+GET https://jsonplaceholder.typicode.com/posts?_limit=5
+Accept: application/json
+
+> {%
+// Generate comprehensive metrics report
+console.log("\n" + "=".repeat(50));
+console.log("           COMPREHENSIVE METRICS REPORT");
+console.log("=".repeat(50));
+
+// Get all available metrics
+var allMetrics = client.metrics.getAll();
+
+// Display each metric type
+Object.keys(allMetrics).forEach(function(metricName) {
+    var metric = allMetrics[metricName];
+    console.log("\n📊 " + metricName.toUpperCase() + ":");
+    console.log("   Type: " + metric.type);
+    console.log("   Count: " + metric.count);
+    
+    if (metric.type === "counter") {
+        console.log("   Total: " + metric.sum);
+        console.log("   Latest: " + metric.latest_value);
+    } else if (metric.type === "histogram") {
+        console.log("   Sum: " + metric.sum.toFixed(1) + "ms");
+        console.log("   Average: " + metric.average.toFixed(1) + "ms");
+        console.log("   Min: " + metric.min.toFixed(1) + "ms");
+        console.log("   Max: " + metric.max.toFixed(1) + "ms");
+        console.log("   P50: " + metric.p50.toFixed(1) + "ms");
+        console.log("   P90: " + metric.p90.toFixed(1) + "ms");
+        console.log("   P95: " + metric.p95.toFixed(1) + "ms");
+        console.log("   P99: " + metric.p99.toFixed(1) + "ms");
+    } else if (metric.type === "rate") {
+        var percentage = (metric.average * 100).toFixed(2);
+        console.log("   Rate: " + percentage + "%");
+        console.log("   Success: " + (metric.sum || 0));
+        console.log("   Total: " + metric.count);
+    }
+});
+
+console.log("\n" + "=".repeat(50));
+
+// Final validation checks using metrics
+client.check("Overall Test Success", function() {
+    var totalReqs = client.metrics.getCurrent("http_reqs");
+    var checksMetric = client.metrics.get("checks");
+    var failedRate = client.metrics.get("http_req_failed");
+    
+    var testsRun = totalReqs >= 5;
+    var checksPass = !checksMetric || checksMetric.average > 0.7; // 70% pass rate
+    var lowFailures = !failedRate || failedRate.average < 0.3; // Less than 30% failures
+    
+    console.log("✅ Test completion: " + (testsRun ? "PASS" : "FAIL"));
+    console.log("✅ Check success rate: " + (checksPass ? "PASS" : "FAIL"));
+    console.log("✅ Low failure rate: " + (lowFailures ? "PASS" : "FAIL"));
+    
+    return testsRun && checksPass && lowFailures;
+}, "Overall test execution should be successful");
+
+// Store final results for external reporting
+client.global.set("final_report", {
+    total_requests: client.metrics.getCurrent("http_reqs"),
+    avg_duration: allMetrics.http_req_duration ? allMetrics.http_req_duration.average : 0,
+    success_rate: allMetrics.http_req_failed ? (1 - allMetrics.http_req_failed.average) * 100 : 100,
+    completed_at: new Date().toISOString()
+});
+%}
+
+###

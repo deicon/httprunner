@@ -47,16 +47,23 @@ func parseRequest(reqStr string) http.Request {
 		return request
 	}
 
-	// Check for name comment (# @name ...)
+	// Skip any comment lines and extract name if present
 	lineIndex := 0
-	if lineIndex < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[lineIndex]), "# @name ") {
-		request.Name = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[lineIndex]), "# @name "))
-		lineIndex++
-	}
-
-	// Skip any remaining empty lines after name
-	for lineIndex < len(lines) && strings.TrimSpace(lines[lineIndex]) == "" {
-		lineIndex++
+	for lineIndex < len(lines) {
+		line := strings.TrimSpace(lines[lineIndex])
+		if strings.HasPrefix(line, "# @name ") {
+			request.Name = strings.TrimSpace(strings.TrimPrefix(line, "# @name "))
+			lineIndex++
+		} else if strings.HasPrefix(line, "#") {
+			// Skip regular comment lines
+			lineIndex++
+		} else if line == "" {
+			// Skip empty lines
+			lineIndex++
+		} else {
+			// Found non-comment, non-empty line
+			break
+		}
 	}
 
 	if lineIndex >= len(lines) {
@@ -84,6 +91,22 @@ func parseRequest(reqStr string) http.Request {
 	}
 
 	request.PreScript = strings.Join(preScriptLines, "\n")
+
+	if lineIndex >= len(lines) {
+		return request
+	}
+
+	// Skip any additional comment lines before HTTP verb/URL
+	for lineIndex < len(lines) {
+		line := strings.TrimSpace(lines[lineIndex])
+		if strings.HasPrefix(line, "#") {
+			lineIndex++
+		} else if line == "" {
+			lineIndex++
+		} else {
+			break
+		}
+	}
 
 	if lineIndex >= len(lines) {
 		return request

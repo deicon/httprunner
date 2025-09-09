@@ -1,6 +1,10 @@
 package reporting
 
-import "time"
+import (
+	"time"
+
+	"github.com/deicon/httprunner/metrics"
+)
 
 // CheckResult represents the result of a single check
 type CheckResult struct {
@@ -51,6 +55,7 @@ type Report struct {
 	TotalChecks              int
 	SuccessfulChecks         int
 	FailedChecks             int
+	MetricsSummaries         map[string]metrics.MetricSummary
 }
 
 // IterationReport contains results for a single iteration

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/deicon/httprunner/metrics"
 )
 
 // FileReporter generates reports from streamed result files
@@ -39,10 +41,12 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 		ResponseTimeDistribution: make(map[string]int),
 		ErrorBreakdown:           make(map[string]int),
 		CheckSummaries:           make(map[string]CheckSummary),
+		RequestDetails:           make([]RequestResult, 0),
 		StartTime:                startTime,
 		EndTime:                  time.Now(),
 		MinResponseTime:          time.Hour, // Initialize to high value
 		MaxResponseTime:          0,
+		MetricsSummaries:         make(map[string]metrics.MetricSummary),
 	}
 
 	scanner := bufio.NewScanner(file)
@@ -130,6 +134,9 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 
 			report.CheckSummaries[check.Name] = checkSummary
 		}
+
+		// Add this request to the details
+		report.RequestDetails = append(report.RequestDetails, result)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -171,7 +178,7 @@ func (fr *FileReporter) generateHierarchicalReportStreaming(startTime time.Time)
 	}
 
 	for goroutineID, iterations := range goroutineData {
-		goroutineReport := fr.buildGoroutineReportFromData(goroutineID, iterations)
+		goroutineReport := fr.buildGoroutineReportFromDataWithResults(goroutineID, iterations, summaryData.requestDetails)
 		hierarchical.VirtualUserReports = append(hierarchical.VirtualUserReports, goroutineReport)
 
 		// Count successful goroutines
@@ -199,6 +206,7 @@ type summaryData struct {
 	totalChecks              int
 	successfulChecks         int
 	failedChecks             int
+	requestDetails           []RequestResult
 }
 
 // iterationData holds aggregated data for an iteration
@@ -233,6 +241,7 @@ func (fr *FileReporter) collectAllDataInSinglePass() (*summaryData, map[int]*gor
 		responseTimeDistribution: make(map[string]int),
 		errorBreakdown:           make(map[string]int),
 		checkSummaries:           make(map[string]CheckSummary),
+		requestDetails:           make([]RequestResult, 0),
 	}
 
 	// Initialize goroutine data map
@@ -334,6 +343,9 @@ func (fr *FileReporter) updateSummaryData(summary *summaryData, result RequestRe
 
 		summary.checkSummaries[check.Name] = checkSummary
 	}
+
+	// Add this request to the details
+	summary.requestDetails = append(summary.requestDetails, result)
 }
 
 // containsString checks if a string slice contains a specific string
@@ -399,8 +411,10 @@ func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime tim
 		TotalChecks:              summary.totalChecks,
 		SuccessfulChecks:         summary.successfulChecks,
 		FailedChecks:             summary.failedChecks,
+		RequestDetails:           summary.requestDetails,
 		StartTime:                startTime,
 		EndTime:                  time.Now(),
+		MetricsSummaries:         make(map[string]metrics.MetricSummary),
 	}
 
 	// Calculate average response time
@@ -411,8 +425,8 @@ func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime tim
 	return report
 }
 
-// buildGoroutineReportFromData builds a goroutine report from collected data
-func (fr *FileReporter) buildGoroutineReportFromData(goroutineID int, goroutineData *goroutineData) GoroutineReport {
+// buildGoroutineReportFromDataWithResults builds a goroutine report from collected data including request results
+func (fr *FileReporter) buildGoroutineReportFromDataWithResults(goroutineID int, goroutineData *goroutineData, allRequestResults []RequestResult) GoroutineReport {
 	report := GoroutineReport{
 		GoroutineID:     goroutineID,
 		Iterations:      make([]IterationReport, 0, len(goroutineData.iterations)),
@@ -425,9 +439,17 @@ func (fr *FileReporter) buildGoroutineReportFromData(goroutineID int, goroutineD
 
 	// Process each iteration
 	for _, iteration := range goroutineData.iterations {
+		// Find request results for this specific goroutine and iteration
+		var iterationRequestResults []RequestResult
+		for _, result := range allRequestResults {
+			if result.VirtualUserID == goroutineID && result.IterationID == iteration.iterationID {
+				iterationRequestResults = append(iterationRequestResults, result)
+			}
+		}
+
 		iterationReport := IterationReport{
 			IterationID:        iteration.iterationID,
-			RequestResults:     nil, // Don't store individual results to save memory
+			RequestResults:     iterationRequestResults, // Now populated with actual results
 			TotalRequests:      iteration.totalRequests,
 			SuccessfulRequests: iteration.successfulRequests,
 			FailedRequests:     iteration.failedRequests,

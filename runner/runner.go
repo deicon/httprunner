@@ -9,6 +9,7 @@ import (
 	"time"
 
 	chttp "github.com/deicon/httprunner/http"
+	"github.com/deicon/httprunner/metrics"
 	"github.com/deicon/httprunner/reporting"
 	"github.com/deicon/httprunner/template"
 )
@@ -22,6 +23,7 @@ type Runner struct {
 	envFile            string
 	StreamingCollector *reporting.StreamingCollector
 	OutputDir          string
+	MetricsCollector   *metrics.MetricsCollector
 }
 
 // NewRunner creates a new Runner with file streaming for memory efficiency
@@ -31,6 +33,8 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, out
 		return nil, fmt.Errorf("failed to create streaming collector: %v", err)
 	}
 
+	metricsCollector := metrics.NewMetricsCollector()
+
 	return &Runner{
 		Concurrency:        concurrency,
 		Iterations:         iterations,
@@ -38,6 +42,7 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, out
 		Requests:           requests,
 		StreamingCollector: streamingCollector,
 		OutputDir:          outputDir,
+		MetricsCollector:   metricsCollector,
 	}, nil
 }
 
@@ -48,6 +53,8 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 		return nil, fmt.Errorf("failed to create streaming collector: %v", err)
 	}
 
+	metricsCollector := metrics.NewMetricsCollector()
+
 	return &Runner{
 		Concurrency:        concurrency,
 		Iterations:         iterations,
@@ -56,6 +63,7 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 		envFile:            envFile,
 		StreamingCollector: streamingCollector,
 		OutputDir:          outputDir,
+		MetricsCollector:   metricsCollector,
 	}, nil
 }
 
@@ -73,7 +81,15 @@ func (r *Runner) Run() (*reporting.Report, error) {
 
 	// Generate report from file
 	fileReporter := reporting.NewFileReporter(r.StreamingCollector.GetResultsFilePath())
-	return fileReporter.GenerateReport(startTime)
+	report, err := fileReporter.GenerateReport(startTime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add metrics summaries to the report
+	report.MetricsSummaries = r.MetricsCollector.GetSummaries()
+
+	return report, nil
 }
 
 // RunHierarchical executes requests with file streaming and returns hierarchical report
@@ -90,7 +106,15 @@ func (r *Runner) RunHierarchical() (*reporting.HierarchicalReport, error) {
 
 	// Generate hierarchical report from file
 	fileReporter := reporting.NewFileReporter(r.StreamingCollector.GetResultsFilePath())
-	return fileReporter.GenerateHierarchicalReport(startTime)
+	hierarchicalReport, err := fileReporter.GenerateHierarchicalReport(startTime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add metrics summaries to the summary report
+	hierarchicalReport.Summary.MetricsSummaries = r.MetricsCollector.GetSummaries()
+
+	return hierarchicalReport, nil
 }
 
 // executeWithStreaming contains the common streaming execution pattern
@@ -100,11 +124,19 @@ func (r *Runner) executeWithStreaming() error {
 
 	wg.Add(r.Concurrency)
 
+	// Update VU metrics
+	r.MetricsCollector.UpdateVirtualUsers(r.Concurrency, r.Concurrency)
+
 	for i := 0; i < r.Concurrency; i++ {
 		go func(workerID int) {
 			defer wg.Done()
 			for j := 0; j < r.Iterations; j++ {
+				iterationStart := time.Now()
 				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
+
+				// Pass metrics collector to template engine for check access
+				templateEngine.SetMetricsCollector(r.MetricsCollector)
+
 				for _, req := range r.Requests {
 					result := r.execute(req, templateEngine, workerID, j)
 					resultChan <- result
@@ -114,6 +146,14 @@ func (r *Runner) executeWithStreaming() error {
 					}
 					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
 				}
+
+				// Record iteration metrics
+				iterationDuration := time.Since(iterationStart)
+				tags := map[string]string{
+					"vu":        fmt.Sprintf("%d", workerID),
+					"iteration": fmt.Sprintf("%d", j),
+				}
+				r.MetricsCollector.RecordIteration(iterationDuration, tags)
 			}
 		}(i)
 	}
@@ -206,14 +246,37 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 		request.Header.Set(key, value)
 	}
 
+	// Timing metrics for HTTP request phases
+	var blocked, connecting, sending, waiting, receiving, tlsHandshaking time.Duration
+
 	start := time.Now()
 	resp, err := client.Do(request)
 	duration := time.Since(start)
 	result.ResponseTime = duration
 
+	// For simplicity, we'll estimate phases (in a real implementation, these would use custom transport)
+	blocked = time.Duration(0)        // Time blocked waiting for connection
+	connecting = duration / 10        // Estimated connection time
+	sending = duration / 20           // Estimated sending time
+	waiting = duration / 2            // Estimated waiting time (TTFB)
+	receiving = duration / 4          // Estimated receiving time
+	tlsHandshaking = time.Duration(0) // TLS handshake time
+
 	if err != nil {
 		result.Success = false
 		result.Error = err.Error()
+
+		// Record failed request metrics
+		tags := map[string]string{
+			"method": req.Verb,
+			"url":    renderedURL,
+			"name":   req.Name,
+			"status": "error",
+		}
+		r.MetricsCollector.RecordHTTPRequest(
+			duration, blocked, connecting, sending, waiting, receiving, tlsHandshaking,
+			true, int64(len(renderedBody)), 0, tags,
+		)
 		return result
 	}
 	defer func(Body io.ReadCloser) {
@@ -239,7 +302,8 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 	result.Name = requestName
 
 	// Check if HTTP status code indicates success (2xx)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	isSuccess := resp.StatusCode >= 200 && resp.StatusCode < 300
+	if !isSuccess {
 		result.Success = false
 		result.Error = fmt.Sprintf("HTTP %d %s", resp.StatusCode, nethttp.StatusText(resp.StatusCode))
 		fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v, Body: %s\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration, responseBody)
@@ -247,6 +311,18 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 		result.Success = true
 		fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration)
 	}
+
+	// Record HTTP request metrics
+	tags := map[string]string{
+		"method": req.Verb,
+		"url":    renderedURL,
+		"name":   requestName,
+		"status": fmt.Sprintf("%d", resp.StatusCode),
+	}
+	r.MetricsCollector.RecordHTTPRequest(
+		duration, blocked, connecting, sending, waiting, receiving, tlsHandshaking,
+		!isSuccess, int64(len(renderedBody)), int64(len(body)), tags,
+	)
 
 	// Execute post-request script if present
 	if req.Script != "" {
@@ -259,6 +335,16 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 
 	// Collect check results from the template engine
 	result.Checks = te.GetChecks()
+
+	// Record check metrics
+	for _, check := range result.Checks {
+		checkTags := map[string]string{
+			"check":  check.Name,
+			"method": req.Verb,
+			"name":   requestName,
+		}
+		r.MetricsCollector.RecordCheck(check.Success, checkTags)
+	}
 
 	return result
 }

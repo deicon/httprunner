@@ -77,6 +77,7 @@ JavaScript code can be embedded using `> {%` and `%}` blocks in two locations:
    - `client.global.set(key, value)`: Store values in global variables
    - `client.global.get(key)`: Retrieve values from global variables
    - `client.check(name, checkHandler, failureMessage)`: Perform validation checks (see Check Functions section)
+   - `client.metrics`: Access to performance and execution metrics (see Metrics Access section)
 
 ### Example requests.http
 
@@ -148,6 +149,154 @@ Accept: application/json
 ###
 ```
 
+### Metrics Access
+
+The `client.metrics` object provides access to real-time performance and execution metrics during script execution. This enables performance monitoring, trend analysis, and data-driven test validation.
+
+#### Available Metrics
+
+httprunner automatically collects these built-in metrics:
+
+- **http_reqs** (Counter): Total number of HTTP requests made
+- **http_req_duration** (Histogram): Duration of HTTP requests in milliseconds
+- **http_req_failed** (Rate): Rate of failed HTTP requests (0.0 to 1.0)
+- **iterations** (Counter): Number of completed iterations
+- **checks** (Rate): Success rate of validation checks
+
+#### Metrics API
+
+##### `client.metrics.getCurrent(metricName)`
+Returns the latest/current value for a metric:
+
+```javascript
+var currentDuration = client.metrics.getCurrent("http_req_duration");
+var totalRequests = client.metrics.getCurrent("http_reqs");
+console.log("Request #" + totalRequests + " took " + currentDuration + "ms");
+```
+
+##### `client.metrics.get(metricName)`
+Returns a complete metric summary object with statistical data:
+
+```javascript
+var durationStats = client.metrics.get("http_req_duration");
+if (durationStats) {
+    console.log("Average: " + durationStats.average + "ms");
+    console.log("Min: " + durationStats.min + "ms");
+    console.log("Max: " + durationStats.max + "ms");
+    console.log("P95: " + durationStats.p95 + "ms");
+}
+```
+
+**Metric Summary Object Properties:**
+- `name`: Metric name
+- `type`: Metric type ("counter", "histogram", "rate")
+- `count`: Number of data points
+- `sum`: Total sum of all values
+- `average`: Average value
+- `min`: Minimum value
+- `max`: Maximum value
+- `p50`: 50th percentile
+- `p90`: 90th percentile
+- `p95`: 95th percentile
+- `p99`: 99th percentile
+- `latest_value`: Most recent value
+
+##### `client.metrics.getAll()`
+Returns all metrics as an object:
+
+```javascript
+var allMetrics = client.metrics.getAll();
+Object.keys(allMetrics).forEach(function(name) {
+    var metric = allMetrics[name];
+    console.log(name + ": " + metric.type + " (" + metric.count + " samples)");
+});
+```
+
+#### Performance Monitoring Examples
+
+##### Response Time Validation
+```javascript
+> {%
+// Check individual request performance
+var duration = client.metrics.getCurrent("http_req_duration");
+client.check("Response Time", function() {
+    return duration < 2000; // Under 2 seconds
+}, "Request should complete within 2 seconds");
+
+// Check performance trends
+var durationStats = client.metrics.get("http_req_duration");
+if (durationStats && durationStats.count >= 5) {
+    client.check("Average Performance", function() {
+        return durationStats.average < 1500;
+    }, "Average response time should be under 1.5 seconds");
+}
+%}
+```
+
+##### Error Rate Monitoring
+```javascript
+> {%
+// Monitor failure rates
+var failureStats = client.metrics.get("http_req_failed");
+var totalReqs = client.metrics.getCurrent("http_reqs");
+
+if (failureStats && totalReqs > 10) {
+    var failureRate = failureStats.average * 100;
+    console.log("Current failure rate: " + failureRate.toFixed(2) + "%");
+    
+    client.check("Error Rate Threshold", function() {
+        return failureRate < 5; // Less than 5%
+    }, "Error rate should be under 5%");
+}
+%}
+```
+
+##### Throughput Analysis
+```javascript
+> {%
+// Calculate throughput
+var durationStats = client.metrics.get("http_req_duration");
+if (durationStats) {
+    var avgDurationSec = durationStats.average / 1000;
+    var throughput = 1 / avgDurationSec;
+    console.log("Throughput: " + throughput.toFixed(2) + " req/s");
+    
+    client.check("Throughput Target", function() {
+        return throughput >= 2.0; // At least 2 requests per second
+    }, "Should meet minimum throughput requirement");
+}
+%}
+```
+
+##### Performance Regression Detection
+```javascript
+> {%
+// Store baseline for comparison
+var currentDuration = client.metrics.getCurrent("http_req_duration");
+var baseline = client.global.get("performance_baseline");
+
+if (!baseline) {
+    client.global.set("performance_baseline", currentDuration);
+} else {
+    var regression = ((currentDuration - baseline) / baseline) * 100;
+    console.log("Performance change: " + regression.toFixed(1) + "%");
+    
+    client.check("No Performance Regression", function() {
+        return Math.abs(regression) < 50; // Within 50%
+    }, "Performance should not regress significantly");
+}
+%}
+```
+
+#### Complete Metrics Dashboard Example
+
+See `examples/metrics-showcase.http` for a comprehensive example demonstrating:
+- Performance baseline establishment
+- Load pattern analysis
+- Error rate monitoring  
+- Throughput calculations
+- Comprehensive metrics reporting
+
 ### Check Functions
 
 The `client.check()` function allows you to perform validation checks on HTTP responses. These checks are tracked and reported in the final test results.
@@ -207,9 +356,9 @@ client.check("User Details Retrieved", function() {
 }, "Should retrieve correct user details");
 
 client.check("Response Time Check", function() {
-    // Note: This is a conceptual example - actual response time would need to be tracked differently
-    return true; // Placeholder for response time validation
-}, "Response time should be acceptable");
+    var duration = client.metrics.getCurrent("http_req_duration");
+    return duration && duration < 2000; // Should be under 2 seconds
+}, "Response time should be under 2 seconds");
 %}
 
 ###

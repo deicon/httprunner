@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/deicon/httprunner/metrics"
 )
 
 // Formatter interface for different report formats
@@ -84,6 +86,73 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 			}
 		}
 		buf.WriteString("\n")
+	}
+
+	// All collected metrics summary
+	if len(report.MetricsSummaries) > 0 {
+		buf.WriteString("All Collected Metrics:\n")
+		buf.WriteString("=====================\n\n")
+
+		// Group metrics by type for better organization
+		counters := make(map[string]metrics.MetricSummary)
+		trends := make(map[string]metrics.MetricSummary)
+		rates := make(map[string]metrics.MetricSummary)
+		gauges := make(map[string]metrics.MetricSummary)
+
+		for name, summary := range report.MetricsSummaries {
+			switch summary.Type {
+			case "counter":
+				counters[name] = summary
+			case "trend":
+				trends[name] = summary
+			case "rate":
+				rates[name] = summary
+			case "gauge":
+				gauges[name] = summary
+			}
+		}
+
+		// Display counters
+		if len(counters) > 0 {
+			buf.WriteString("Counters:\n")
+			for name, summary := range counters {
+				buf.WriteString(fmt.Sprintf("  %-25s %10.0f  (count: %d)\n", name, summary.Sum, summary.Count))
+			}
+			buf.WriteString("\n")
+		}
+
+		// Display trends (histograms)
+		if len(trends) > 0 {
+			buf.WriteString("Trends:\n")
+			for name, summary := range trends {
+				unit := "ms"
+				if name == "data_sent" || name == "data_received" {
+					unit = "bytes"
+				}
+				buf.WriteString(fmt.Sprintf("  %-25s avg=%.2f%s min=%.2f%s med=%.2f%s max=%.2f%s p(90)=%.2f%s p(95)=%.2f%s\n",
+					name, summary.Average, unit, summary.Min, unit, summary.P50, unit, summary.Max, unit, summary.P90, unit, summary.P95, unit))
+			}
+			buf.WriteString("\n")
+		}
+
+		// Display rates
+		if len(rates) > 0 {
+			buf.WriteString("Rates:\n")
+			for name, summary := range rates {
+				rate := summary.Average * 100 // Convert to percentage
+				buf.WriteString(fmt.Sprintf("  %-25s %.2f%%  (count: %d)\n", name, rate, summary.Count))
+			}
+			buf.WriteString("\n")
+		}
+
+		// Display gauges
+		if len(gauges) > 0 {
+			buf.WriteString("Gauges:\n")
+			for name, summary := range gauges {
+				buf.WriteString(fmt.Sprintf("  %-25s %.0f  (latest: %.0f)\n", name, summary.Average, summary.LatestValue))
+			}
+			buf.WriteString("\n")
+		}
 	}
 
 	// Request details (limited to first 10 for console)
@@ -216,6 +285,60 @@ const htmlTemplate = `<!DOCTYPE html>
     </div>
     {{end}}
 
+    {{if .MetricsSummaries}}
+    <div class="summary">
+        <h3>📊 All Collected Metrics</h3>
+        
+        <h4>Counters</h4>
+        <table style="margin-bottom: 20px;">
+            <tr><th>Metric</th><th>Value</th><th>Count</th></tr>
+            {{range $name, $summary := .MetricsSummaries}}
+                {{if eq $summary.Type "counter"}}
+                <tr><td>{{$name}}</td><td>{{printf "%.0f" $summary.Sum}}</td><td>{{$summary.Count}}</td></tr>
+                {{end}}
+            {{end}}
+        </table>
+        
+        <h4>Trends (Timing/Size Metrics)</h4>
+        <table style="margin-bottom: 20px;">
+            <tr><th>Metric</th><th>Avg</th><th>Min</th><th>Med</th><th>Max</th><th>P90</th><th>P95</th></tr>
+            {{range $name, $summary := .MetricsSummaries}}
+                {{if eq $summary.Type "trend"}}
+                <tr>
+                    <td>{{$name}}</td>
+                    <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f bytes" $summary.Average}}{{else}}{{printf "%.2f ms" $summary.Average}}{{end}}</td>
+                    <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.Min}}{{else}}{{printf "%.2f" $summary.Min}}{{end}}</td>
+                    <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.P50}}{{else}}{{printf "%.2f" $summary.P50}}{{end}}</td>
+                    <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.Max}}{{else}}{{printf "%.2f" $summary.Max}}{{end}}</td>
+                    <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.P90}}{{else}}{{printf "%.2f" $summary.P90}}{{end}}</td>
+                    <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.P95}}{{else}}{{printf "%.2f" $summary.P95}}{{end}}</td>
+                </tr>
+                {{end}}
+            {{end}}
+        </table>
+        
+        <h4>Rates</h4>
+        <table style="margin-bottom: 20px;">
+            <tr><th>Metric</th><th>Rate</th><th>Count</th></tr>
+            {{range $name, $summary := .MetricsSummaries}}
+                {{if eq $summary.Type "rate"}}
+                <tr><td>{{$name}}</td><td>{{printf "%.2f%%" (mul $summary.Average 100.0)}}</td><td>{{$summary.Count}}</td></tr>
+                {{end}}
+            {{end}}
+        </table>
+        
+        <h4>Gauges</h4>
+        <table style="margin-bottom: 20px;">
+            <tr><th>Metric</th><th>Average</th><th>Latest</th></tr>
+            {{range $name, $summary := .MetricsSummaries}}
+                {{if eq $summary.Type "gauge"}}
+                <tr><td>{{$name}}</td><td>{{printf "%.0f" $summary.Average}}</td><td>{{printf "%.0f" $summary.LatestValue}}</td></tr>
+                {{end}}
+            {{end}}
+        </table>
+    </div>
+    {{end}}
+
     <h3>Request Details</h3>
     <table>
         <tr>
@@ -260,6 +383,7 @@ const htmlTemplate = `<!DOCTYPE html>
 func (f *HTMLFormatter) Format(report *Report) (string, error) {
 	tmpl, err := template.New("report").Funcs(template.FuncMap{
 		"add": func(a, b int) int { return a + b },
+		"mul": func(a, b float64) float64 { return a * b },
 	}).Parse(htmlTemplate)
 	if err != nil {
 		return "", err
@@ -366,6 +490,7 @@ func (f *JSONFormatter) Format(report *Report) (string, error) {
 		"responseTimeDistribution": report.ResponseTimeDistribution,
 		"errorBreakdown":           report.ErrorBreakdown,
 		"checkSummaries":           report.CheckSummaries,
+		"metricsSummaries":         report.MetricsSummaries,
 		"requestDetails":           report.RequestDetails,
 	}
 
@@ -483,6 +608,73 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 			}
 		}
 		buf.WriteString("\n")
+	}
+
+	// All collected metrics summary
+	if len(report.Summary.MetricsSummaries) > 0 {
+		buf.WriteString("All Collected Metrics:\n")
+		buf.WriteString("=====================\n\n")
+
+		// Group metrics by type for better organization
+		counters := make(map[string]metrics.MetricSummary)
+		trends := make(map[string]metrics.MetricSummary)
+		rates := make(map[string]metrics.MetricSummary)
+		gauges := make(map[string]metrics.MetricSummary)
+
+		for name, summary := range report.Summary.MetricsSummaries {
+			switch summary.Type {
+			case "counter":
+				counters[name] = summary
+			case "trend":
+				trends[name] = summary
+			case "rate":
+				rates[name] = summary
+			case "gauge":
+				gauges[name] = summary
+			}
+		}
+
+		// Display counters
+		if len(counters) > 0 {
+			buf.WriteString("Counters:\n")
+			for name, summary := range counters {
+				buf.WriteString(fmt.Sprintf("  %-25s %10.0f  (count: %d)\n", name, summary.Sum, summary.Count))
+			}
+			buf.WriteString("\n")
+		}
+
+		// Display trends (histograms)
+		if len(trends) > 0 {
+			buf.WriteString("Trends:\n")
+			for name, summary := range trends {
+				unit := "ms"
+				if name == "data_sent" || name == "data_received" {
+					unit = "bytes"
+				}
+				buf.WriteString(fmt.Sprintf("  %-25s avg=%.2f%s min=%.2f%s med=%.2f%s max=%.2f%s p(90)=%.2f%s p(95)=%.2f%s\n",
+					name, summary.Average, unit, summary.Min, unit, summary.P50, unit, summary.Max, unit, summary.P90, unit, summary.P95, unit))
+			}
+			buf.WriteString("\n")
+		}
+
+		// Display rates
+		if len(rates) > 0 {
+			buf.WriteString("Rates:\n")
+			for name, summary := range rates {
+				rate := summary.Average * 100 // Convert to percentage
+				buf.WriteString(fmt.Sprintf("  %-25s %.2f%%  (count: %d)\n", name, rate, summary.Count))
+			}
+			buf.WriteString("\n")
+		}
+
+		// Display gauges
+		if len(gauges) > 0 {
+			buf.WriteString("Gauges:\n")
+			for name, summary := range gauges {
+				buf.WriteString(fmt.Sprintf("  %-25s %.0f  (latest: %.0f)\n", name, summary.Average, summary.LatestValue))
+			}
+			buf.WriteString("\n")
+		}
 	}
 
 	// Show goroutine details if requested
