@@ -95,7 +95,7 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 
 		// Group metrics by type for better organization
 		counters := make(map[string]metrics.MetricSummary)
-		trends := make(map[string]metrics.MetricSummary) 
+		trends := make(map[string]metrics.MetricSummary)
 		rates := make(map[string]metrics.MetricSummary)
 		gauges := make(map[string]metrics.MetricSummary)
 
@@ -129,7 +129,7 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 				if name == "data_sent" || name == "data_received" {
 					unit = "bytes"
 				}
-				buf.WriteString(fmt.Sprintf("  %-25s avg=%.2f%s min=%.2f%s med=%.2f%s max=%.2f%s p(90)=%.2f%s p(95)=%.2f%s\n", 
+				buf.WriteString(fmt.Sprintf("  %-25s avg=%.2f%s min=%.2f%s med=%.2f%s max=%.2f%s p(90)=%.2f%s p(95)=%.2f%s\n",
 					name, summary.Average, unit, summary.Min, unit, summary.P50, unit, summary.Max, unit, summary.P90, unit, summary.P95, unit))
 			}
 			buf.WriteString("\n")
@@ -617,7 +617,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 
 		// Group metrics by type for better organization
 		counters := make(map[string]metrics.MetricSummary)
-		trends := make(map[string]metrics.MetricSummary) 
+		trends := make(map[string]metrics.MetricSummary)
 		rates := make(map[string]metrics.MetricSummary)
 		gauges := make(map[string]metrics.MetricSummary)
 
@@ -651,7 +651,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 				if name == "data_sent" || name == "data_received" {
 					unit = "bytes"
 				}
-				buf.WriteString(fmt.Sprintf("  %-25s avg=%.2f%s min=%.2f%s med=%.2f%s max=%.2f%s p(90)=%.2f%s p(95)=%.2f%s\n", 
+				buf.WriteString(fmt.Sprintf("  %-25s avg=%.2f%s min=%.2f%s med=%.2f%s max=%.2f%s p(90)=%.2f%s p(95)=%.2f%s\n",
 					name, summary.Average, unit, summary.Min, unit, summary.P50, unit, summary.Max, unit, summary.P90, unit, summary.P95, unit))
 			}
 			buf.WriteString("\n")
