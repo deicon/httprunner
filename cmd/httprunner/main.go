@@ -12,7 +12,6 @@ import (
 	"github.com/deicon/httprunner/runner"
 )
 
-
 func main() {
 	// Command line flags
 	concurrency := flag.Int("u", 1, "Number of parallel virtual parallel users")
@@ -30,7 +29,6 @@ func main() {
 		fmt.Println("Error: -f flag is required")
 		os.Exit(1)
 	}
-
 
 	// Validate report format
 	format := reporting.ReportFormat(strings.ToLower(*reportFormat))
@@ -128,4 +126,3 @@ func main() {
 
 	fmt.Printf("Raw results available in: %s/raw-results-*.jsonl\n", *reportOutput)
 }
-
