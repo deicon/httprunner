@@ -1,4 +1,3 @@
-
 cmd/*/httprunner
 cmd/*/harparser
 requests.http
@@ -6,3 +5,5 @@ requests.http
 build
 /test_*_output*/*
 node_modules
+/httprunner
+/harparser

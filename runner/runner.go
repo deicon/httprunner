@@ -347,7 +347,7 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 		fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v, Body: %s\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration, responseBody)
 	} else {
 		result.Success = true
-		fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v, Body: %s\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration, responseBody)
+		fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration)
 	}
 
 	// Execute post-request script if present
