@@ -109,7 +109,7 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 					FailureMessages: make([]string, 0),
 				}
 			}
-			
+
 			checkSummary.TotalRuns++
 			if check.Success {
 				checkSummary.SuccessfulRuns++
@@ -127,7 +127,7 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 					checkSummary.FailureMessages = append(checkSummary.FailureMessages, check.FailureMessage)
 				}
 			}
-			
+
 			report.CheckSummaries[check.Name] = checkSummary
 		}
 	}
@@ -321,7 +321,7 @@ func (fr *FileReporter) updateSummaryData(summary *summaryData, result RequestRe
 				FailureMessages: make([]string, 0),
 			}
 		}
-		
+
 		checkSummary.TotalRuns++
 		if check.Success {
 			checkSummary.SuccessfulRuns++
@@ -331,7 +331,7 @@ func (fr *FileReporter) updateSummaryData(summary *summaryData, result RequestRe
 				checkSummary.FailureMessages = append(checkSummary.FailureMessages, check.FailureMessage)
 			}
 		}
-		
+
 		summary.checkSummaries[check.Name] = checkSummary
 	}
 }

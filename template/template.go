@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/dop251/goja"
 	"github.com/deicon/httprunner/reporting"
+	"github.com/dop251/goja"
 )
 
 // GlobalStore manages global variables shared across requests
@@ -227,11 +227,11 @@ func (te *Engine) GetGlobalStore() *GlobalStore {
 func (te *Engine) GetChecks() []reporting.CheckResult {
 	te.checksMu.Lock()
 	defer te.checksMu.Unlock()
-	
+
 	checks := make([]reporting.CheckResult, len(te.checks))
 	copy(checks, te.checks)
 	te.checks = te.checks[:0] // Clear the slice
-	
+
 	return checks
 }
 

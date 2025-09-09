@@ -88,7 +88,7 @@ func (c *Collector) GenerateReport() *Report {
 					FailureMessages: make([]string, 0),
 				}
 			}
-			
+
 			summary.TotalRuns++
 			if check.Success {
 				summary.SuccessfulRuns++
@@ -98,7 +98,7 @@ func (c *Collector) GenerateReport() *Report {
 					summary.FailureMessages = append(summary.FailureMessages, check.FailureMessage)
 				}
 			}
-			
+
 			report.CheckSummaries[check.Name] = summary
 		}
 	}
@@ -145,9 +145,9 @@ func (c *Collector) GenerateHierarchicalReport() *HierarchicalReport {
 	}
 
 	hierarchical := &HierarchicalReport{
-		Summary:               *summaryReport,
-		VirtualUserReports:    make([]GoroutineReport, 0, len(goroutineMap)),
-		TotalVirtualUsers:     len(goroutineMap),
+		Summary:            *summaryReport,
+		VirtualUserReports: make([]GoroutineReport, 0, len(goroutineMap)),
+		TotalVirtualUsers:  len(goroutineMap),
 	}
 
 	// Generate goroutine reports

@@ -68,7 +68,7 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 		buf.WriteString(fmt.Sprintf("Total Checks: %d\n", report.TotalChecks))
 		buf.WriteString(fmt.Sprintf("Successful Checks: %d\n", report.SuccessfulChecks))
 		buf.WriteString(fmt.Sprintf("Failed Checks: %d\n", report.FailedChecks))
-		
+
 		if report.TotalChecks > 0 {
 			checkSuccessRate := float64(report.SuccessfulChecks) / float64(report.TotalChecks) * 100
 			buf.WriteString(fmt.Sprintf("Check Success Rate: %.1f%%\n", checkSuccessRate))
@@ -77,7 +77,7 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 
 		buf.WriteString("Check Breakdown:\n")
 		for checkName, summary := range report.CheckSummaries {
-			buf.WriteString(fmt.Sprintf("- %s: %d runs (%d successful, %d failed)\n", 
+			buf.WriteString(fmt.Sprintf("- %s: %d runs (%d successful, %d failed)\n",
 				checkName, summary.TotalRuns, summary.SuccessfulRuns, summary.FailedRuns))
 			if len(summary.FailureMessages) > 0 {
 				buf.WriteString(fmt.Sprintf("  Failure reasons: %v\n", summary.FailureMessages))
@@ -100,7 +100,7 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 			if !req.Success {
 				status = fmt.Sprintf("ERROR: %s", req.Error)
 			}
-			
+
 			// Build check failure info for this request
 			checkFailureInfo := ""
 			failedChecks := make([]string, 0)
@@ -112,7 +112,7 @@ func (f *ConsoleFormatter) Format(report *Report) (string, error) {
 			if len(failedChecks) > 0 {
 				checkFailureInfo = fmt.Sprintf("    %s Check Failed (Failures: %s)", req.Timestamp.Format("15:04:05.000"), strings.Join(failedChecks, ", "))
 			}
-			
+
 			buf.WriteString(fmt.Sprintf("  %d    %s    %s    %s    %s    %.3f ms%s\n",
 				i+1, req.Name, req.Verb, req.URL, status, float64(req.ResponseTime.Nanoseconds())/1000000.0, checkFailureInfo))
 		}
@@ -220,30 +220,35 @@ const htmlTemplate = `<!DOCTYPE html>
     <table>
         <tr>
             <th>#</th>
+            <th>Name</th>
             <th>Method</th>
             <th>URL</th>
             <th>Status</th>
             <th>Response Time</th>
-            <th>Check Failures</th>
+            <th>Checks</th>
             <th>Timestamp</th>
         </tr>
         {{range $index, $req := .RequestDetails}}
         <tr>
             <td>{{add $index 1}}</td>
+            <td>{{$req.Name}}</td>
             <td>{{$req.Verb}}</td>
             <td>{{$req.URL}}</td>
             <td>{{if $req.Success}}<span class="success">{{$req.StatusCode}} OK</span>{{else}}<span class="error">{{$req.Error}}</span>{{end}}</td>
             <td>{{$req.ResponseTime}}</td>
             <td>
-                {{$failedChecks := 0}}
-                {{range $check := $req.Checks}}
-                    {{if not $check.Success}}
-                        {{if gt $failedChecks 0}}, {{end}}
-                        <span class="error">{{$check.FailureMessage}}</span>
-                        {{$failedChecks = add $failedChecks 1}}
+                {{if gt (len $req.Checks) 0}}
+                    {{range $checkIndex, $check := $req.Checks}}
+                        {{if gt $checkIndex 0}}<br>{{end}}
+                        {{if $check.Success}}
+                            <span class="success">✓ {{$check.Name}}</span>
+                        {{else}}
+                            <span class="error">✗ {{$check.Name}}: {{$check.FailureMessage}}</span>
+                        {{end}}
                     {{end}}
+                {{else}}
+                    -
                 {{end}}
-                {{if eq $failedChecks 0}}-{{end}}
             </td>
             <td>{{$req.Timestamp.Format "2006-01-02 15:04:05"}}</td>
         </tr>
@@ -274,7 +279,7 @@ func (f *HTMLFormatter) Format(report *Report) (string, error) {
 	if report.TotalRequests > 0 {
 		data.SuccessRate = float64(report.SuccessfulRequests) / float64(report.TotalRequests) * 100
 	}
-	
+
 	if report.TotalChecks > 0 {
 		data.CheckSuccessRate = float64(report.SuccessfulChecks) / float64(report.TotalChecks) * 100
 	}
@@ -310,7 +315,7 @@ func (f *CSVFormatter) Format(report *Report) (string, error) {
 			}
 		}
 		checkFailuresStr := strings.Join(failedChecks, "; ")
-		
+
 		record := []string{
 			strconv.Itoa(i + 1),
 			req.Name,
@@ -367,7 +372,7 @@ func (f *JSONFormatter) Format(report *Report) (string, error) {
 	if report.TotalRequests > 0 {
 		output["summary"].(map[string]interface{})["successRate"] = float64(report.SuccessfulRequests) / float64(report.TotalRequests) * 100
 	}
-	
+
 	if report.TotalChecks > 0 {
 		output["summary"].(map[string]interface{})["checkSuccessRate"] = float64(report.SuccessfulChecks) / float64(report.TotalChecks) * 100
 	}
@@ -462,7 +467,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 		buf.WriteString(fmt.Sprintf("Total Checks: %d\n", report.Summary.TotalChecks))
 		buf.WriteString(fmt.Sprintf("Successful Checks: %d\n", report.Summary.SuccessfulChecks))
 		buf.WriteString(fmt.Sprintf("Failed Checks: %d\n", report.Summary.FailedChecks))
-		
+
 		if report.Summary.TotalChecks > 0 {
 			checkSuccessRate := float64(report.Summary.SuccessfulChecks) / float64(report.Summary.TotalChecks) * 100
 			buf.WriteString(fmt.Sprintf("Check Success Rate: %.1f%%\n", checkSuccessRate))
@@ -471,7 +476,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 
 		buf.WriteString("Check Breakdown:\n")
 		for checkName, summary := range report.Summary.CheckSummaries {
-			buf.WriteString(fmt.Sprintf("- %s: %d runs (%d successful, %d failed)\n", 
+			buf.WriteString(fmt.Sprintf("- %s: %d runs (%d successful, %d failed)\n",
 				checkName, summary.TotalRuns, summary.SuccessfulRuns, summary.FailedRuns))
 			if len(summary.FailureMessages) > 0 {
 				buf.WriteString(fmt.Sprintf("  Failure reasons: %v\n", summary.FailureMessages))
@@ -515,13 +520,13 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 							}
 						}
 					}
-					
+
 					buf.WriteString(fmt.Sprintf("  Iteration %d:\n", iter.IterationID))
 					buf.WriteString(fmt.Sprintf("    Requests: %d (Success: %d, Failed: %d)\n",
 						iter.TotalRequests, iter.SuccessfulRequests, iter.FailedRequests))
 					buf.WriteString(fmt.Sprintf("    Average Response Time: %v\n", iter.AverageResponseTime))
 					buf.WriteString(fmt.Sprintf("    Duration: %v\n", iter.TotalDuration))
-					
+
 					if len(failedChecksList) > 0 {
 						buf.WriteString(fmt.Sprintf("    Check Failures: %s\n", strings.Join(failedChecksList, ", ")))
 					}
@@ -546,7 +551,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 						if !req.Success {
 							status = fmt.Sprintf("ERROR: %s", req.Error)
 						}
-						
+
 						// Build check failure info for this request
 						checkFailureInfo := ""
 						failedChecks := make([]string, 0)
@@ -558,7 +563,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 						if len(failedChecks) > 0 {
 							checkFailureInfo = fmt.Sprintf("    %s Check Failed (Failures: %s)", req.Timestamp.Format("15:04:05.000"), strings.Join(failedChecks, ", "))
 						}
-						
+
 						buf.WriteString(fmt.Sprintf("  %d    %s    %s    %s    %s    %.3f ms%s\n",
 							count, req.Name, req.Verb, req.URL, status, float64(req.ResponseTime.Nanoseconds())/1000000.0, checkFailureInfo))
 						count++
@@ -930,7 +935,7 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
     <div class="content">
         {{range $goroutineIndex, $goroutine := .VirtualUserReports}}
         <div class="goroutine-header">
-            <strong>Goroutine {{$goroutine.GoroutineID}}</strong>
+            <strong>VirtualUser {{$goroutine.GoroutineID}}</strong>
             - {{$goroutine.TotalRequests}} requests 
             - {{printf "%.1f" (mul (div (float64 $goroutine.SuccessfulRequests) (float64 $goroutine.TotalRequests)) 100.0)}}% success rate
             - Avg: {{$goroutine.AverageResponseTime}}
@@ -969,9 +974,6 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
                     - {{if gt $iteration.TotalRequests 0}}{{printf "%.1f" (mul (div (float64 $iteration.SuccessfulRequests) (float64 $iteration.TotalRequests)) 100.0)}}%{{else}}0%{{end}} success
                     - {{$iteration.AverageResponseTime}} avg
                     - {{$iteration.TotalDuration}} duration
-                    {{with collectFailedChecks $iteration.RequestResults}}
-                        <br><small style="color: #dc3545;"><strong>Check Failures:</strong> {{.}}</small>
-                    {{end}}
                 </div>
                 
                 {{if eq $.DetailLevel "full"}}
@@ -985,6 +987,7 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
                             <th>URL</th>
                             <th>Status</th>
                             <th>Response Time</th>
+                            <th>Checks</th>
                             <th>Timestamp</th>
                         </tr>
                         {{range $requestIndex, $request := $iteration.RequestResults}}
@@ -1001,6 +1004,20 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
                                 {{end}}
                             </td>
                             <td>{{$request.ResponseTime}}</td>
+                            <td>
+                                {{if gt (len $request.Checks) 0}}
+                                    {{range $checkIndex, $check := $request.Checks}}
+                                        {{if gt $checkIndex 0}}<br>{{end}}
+                                        {{if $check.Success}}
+                                            <span class="success">✓ {{$check.Name}}</span>
+                                        {{else}}
+                                            <span class="error">✗ {{$check.Name}}: {{$check.FailureMessage}}</span>
+                                        {{end}}
+                                    {{end}}
+                                {{else}}
+                                    -
+                                {{end}}
+                            </td>
                             <td class="timestamp">{{$request.Timestamp.Format "15:04:05.000"}}</td>
                         </tr>
                         {{end}}

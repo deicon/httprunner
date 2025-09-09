@@ -225,7 +225,7 @@ func TestCheckFunctionClearance(t *testing.T) {
 	script := `
 		client.check("Test Check", function() { return true; }, "Test message");
 	`
-	
+
 	err := engine.ExecuteScript(script, `{}`)
 	if err != nil {
 		t.Errorf("Script execution failed: %v", err)
