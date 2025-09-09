@@ -1,4 +1,6 @@
-httprunner
+
+cmd/*/httprunner
+cmd/*/harparser
 requests.http
 *.env
 build
