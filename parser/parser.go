@@ -172,6 +172,3 @@ func parseRequest(reqStr string) http.Request {
 
 	return request
 }
-
-// Test comment for husky pre-commit hook
-// Another test comment for husky pre-commit hook
