@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	chttp "github.com/deicon/httprunner/http"
 	"github.com/deicon/httprunner/metrics"
 	"github.com/deicon/httprunner/reporting/types"
 	"github.com/dop251/goja"
@@ -114,19 +116,32 @@ func (gs *GlobalStore) GetAll() map[string]interface{} {
 	return result
 }
 
+// Response represents a simplified HTTP response for JavaScript access
+type Response struct {
+	StatusCode int               `json:"status_code"`
+	Body       interface{}       `json:"body"`
+	Headers    map[string]string `json:"headers"`
+}
+
+// RequestExecutor is a function type for executing HTTP requests
+type RequestExecutor func(request chttp.Request) (*Response, error)
+
 // TemplateEngine handles template rendering and JavaScript execution
 type Engine struct {
 	globalStore      *GlobalStore
 	checks           []types.CheckResult
 	checksMu         sync.Mutex
 	metricsCollector *metrics.MetricsCollector
+	requestFunctions map[string]chttp.Request
+	requestExecutor  RequestExecutor
 }
 
 // NewTemplateEngine creates a new template engine
 func NewTemplateEngine() *Engine {
 	return &Engine{
-		globalStore: NewGlobalStore(),
-		checks:      make([]types.CheckResult, 0),
+		globalStore:      NewGlobalStore(),
+		checks:           make([]types.CheckResult, 0),
+		requestFunctions: make(map[string]chttp.Request),
 	}
 }
 
@@ -139,8 +154,9 @@ func NewTemplateEngineWithEnvFile(envFile string) (*Engine, error) {
 		}
 	}
 	return &Engine{
-		globalStore: store,
-		checks:      make([]types.CheckResult, 0),
+		globalStore:      store,
+		checks:           make([]types.CheckResult, 0),
+		requestFunctions: make(map[string]chttp.Request),
 	}, nil
 }
 
@@ -160,7 +176,7 @@ func (te *Engine) RenderTemplate(templateStr string) (string, error) {
 }
 
 // ExecuteScript executes JavaScript code with access to global store and response
-func (te *Engine) ExecuteScript(script string, responseBody string) error {
+func (te *Engine) ExecuteScript(script string, responseBody string, virtualUserID, iterationID int) error {
 	vm := goja.New()
 
 	// Create client.global object
@@ -264,6 +280,43 @@ func (te *Engine) ExecuteScript(script string, responseBody string) error {
 	}
 
 	_ = clientObj.Set("global", globalObj)
+
+	// Create context object with user and iteration IDs
+	contextObj := vm.NewObject()
+	_ = contextObj.Set("userId", virtualUserID)
+	_ = contextObj.Set("iterationId", iterationID)
+	_ = vm.Set("context", contextObj)
+
+	// Add named request functions to client object
+	for functionName, request := range te.requestFunctions {
+		// Capture the request in closure to avoid variable capture issues
+		requestCopy := request
+		_ = clientObj.Set(functionName, func() interface{} {
+			if te.requestExecutor != nil {
+				response, err := te.requestExecutor(requestCopy)
+				if err != nil {
+					// Return error information
+					errorObj := vm.NewObject()
+					_ = errorObj.Set("error", err.Error())
+					_ = errorObj.Set("success", false)
+					return errorObj
+				}
+				// Convert response to JavaScript object
+				responseObj := vm.NewObject()
+				_ = responseObj.Set("body", response.Body)
+				_ = responseObj.Set("status_code", response.StatusCode)
+				_ = responseObj.Set("headers", response.Headers)
+				_ = responseObj.Set("success", true)
+				return responseObj
+			}
+			// If no executor is set, return empty response
+			emptyObj := vm.NewObject()
+			_ = emptyObj.Set("error", "Request executor not available")
+			_ = emptyObj.Set("success", false)
+			return emptyObj
+		})
+	}
+
 	_ = vm.Set("client", clientObj)
 
 	// Add console support for logging
@@ -333,4 +386,33 @@ func (te *Engine) ClearChecks() {
 	te.checksMu.Lock()
 	defer te.checksMu.Unlock()
 	te.checks = te.checks[:0]
+}
+
+// RegisterRequestFunction registers a named request as a callable function
+func (te *Engine) RegisterRequestFunction(request chttp.Request) {
+	if request.Name != "" {
+		functionName := convertNameToFunctionName(request.Name)
+		te.requestFunctions[functionName] = request
+	}
+}
+
+// SetRequestExecutor sets the function used to execute HTTP requests
+func (te *Engine) SetRequestExecutor(executor RequestExecutor) {
+	te.requestExecutor = executor
+}
+
+// convertNameToFunctionName converts a request name to a JavaScript function name
+// Example: "Create User" -> "create_user"
+func convertNameToFunctionName(name string) string {
+	// Convert to lowercase and replace spaces with underscores
+	functionName := strings.ToLower(name)
+	// Replace any non-alphanumeric characters with underscores
+	reg := regexp.MustCompile(`[^a-z0-9_]`)
+	functionName = reg.ReplaceAllString(functionName, "_")
+	// Remove consecutive underscores
+	reg = regexp.MustCompile(`_+`)
+	functionName = reg.ReplaceAllString(functionName, "_")
+	// Remove leading/trailing underscores
+	functionName = strings.Trim(functionName, "_")
+	return functionName
 }

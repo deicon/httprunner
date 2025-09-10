@@ -49,7 +49,7 @@ func TestJavaScriptExecution(t *testing.T) {
 		client.global.set("extracted_name", data.name);
 	`
 
-	err := engine.ExecuteScript(script, jsonResponse)
+	err := engine.ExecuteScript(script, jsonResponse, 0, 0)
 	if err != nil {
 		t.Errorf("Script execution failed: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestJavaScriptStringMethods(t *testing.T) {
 		client.global.set("path_end", pathParts);
 	`
 
-	err := engine.ExecuteScript(script, jsonResponse)
+	err := engine.ExecuteScript(script, jsonResponse, 0, 0)
 	if err != nil {
 		t.Errorf("Script execution failed: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestCheckFunction(t *testing.T) {
 	`
 	jsonResponse := `{"status":"VORSCHLAG_BERECHNET","id":123}`
 
-	err := engine.ExecuteScript(script, jsonResponse)
+	err := engine.ExecuteScript(script, jsonResponse, 0, 0)
 	if err != nil {
 		t.Errorf("Script execution failed: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestCheckFunctionFailure(t *testing.T) {
 	`
 	jsonResponse := `{"id":123,"status":"OK"}`
 
-	err := engine.ExecuteScript(script, jsonResponse)
+	err := engine.ExecuteScript(script, jsonResponse, 0, 0)
 	if err != nil {
 		t.Errorf("Script execution failed: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestMultipleChecks(t *testing.T) {
 	`
 	jsonResponse := `{"id":150,"status":"OK","name":"test user"}`
 
-	err := engine.ExecuteScript(script, jsonResponse)
+	err := engine.ExecuteScript(script, jsonResponse, 0, 0)
 	if err != nil {
 		t.Errorf("Script execution failed: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestCheckFunctionClearance(t *testing.T) {
 		client.check("Test Check", function() { return true; }, "Test message");
 	`
 
-	err := engine.ExecuteScript(script, `{}`)
+	err := engine.ExecuteScript(script, `{}`, 0, 0)
 	if err != nil {
 		t.Errorf("Script execution failed: %v", err)
 	}

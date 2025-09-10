@@ -29,6 +29,12 @@ type Runner struct {
 	StreamingCollector *streaming.StreamingCollector
 	OutputDir          string
 	MetricsCollector   *metrics.MetricsCollector
+	// Categorized requests by lifecycle
+	beforeUserRequests        []chttp.Request
+	beforeIterationRequests   []chttp.Request
+	teardownUserRequests      []chttp.Request
+	teardownIterationRequests []chttp.Request
+	normalRequests            []chttp.Request
 }
 
 // NewRunner creates a new Runner with file streaming for memory efficiency
@@ -40,7 +46,7 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, out
 
 	metricsCollector := metrics.NewMetricsCollector()
 
-	return &Runner{
+	runner := &Runner{
 		Concurrency:        concurrency,
 		Iterations:         iterations,
 		Delay:              delay,
@@ -48,7 +54,10 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, out
 		StreamingCollector: streamingCollector,
 		OutputDir:          outputDir,
 		MetricsCollector:   metricsCollector,
-	}, nil
+	}
+
+	runner.categorizeRequests()
+	return runner, nil
 }
 
 // NewRunnerWithEnvFile creates a new Runner with streaming and env file support
@@ -60,7 +69,7 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 
 	metricsCollector := metrics.NewMetricsCollector()
 
-	return &Runner{
+	runner := &Runner{
 		Concurrency:        concurrency,
 		Iterations:         iterations,
 		Delay:              delay,
@@ -69,7 +78,10 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 		StreamingCollector: streamingCollector,
 		OutputDir:          outputDir,
 		MetricsCollector:   metricsCollector,
-	}, nil
+	}
+
+	runner.categorizeRequests()
+	return runner, nil
 }
 
 // Run executes requests with file streaming to reduce memory usage
@@ -131,6 +143,46 @@ func (r *Runner) executeWithStreaming() error {
 	var wg sync.WaitGroup
 	resultChan := make(chan types.RequestResult, 1000)
 
+	// Create a shared template engine for @BeforeUser scripts
+	globalTemplateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
+	globalTemplateEngine.SetMetricsCollector(r.MetricsCollector)
+
+	// Register all named requests as callable functions
+	for _, req := range r.Requests {
+		globalTemplateEngine.RegisterRequestFunction(req)
+	}
+
+	// Set up request executor for function calls
+	globalTemplateEngine.SetRequestExecutor(func(request chttp.Request) (*template.Response, error) {
+		// Execute the request and return a simplified response
+		result := r.execute(request, globalTemplateEngine, -1, -1) // Use -1 to indicate system execution
+		response := &template.Response{
+			StatusCode: result.StatusCode,
+			Headers:    make(map[string]string),
+		}
+
+		// Parse response body if available
+		if result.Success {
+			response.Body = result.Name // This would need to be the actual response body
+		} else {
+			response.Body = map[string]interface{}{
+				"error": result.Error,
+			}
+		}
+
+		return response, nil
+	})
+
+	// Execute @BeforeUser scripts once before starting workers
+	for _, req := range r.beforeUserRequests {
+		if req.PreScript != "" || req.Script != "" {
+			script := req.PreScript + "\n" + req.Script
+			if err := globalTemplateEngine.ExecuteScript(script, "", -1, -1); err != nil {
+				return fmt.Errorf("error executing @BeforeUser script for %s: %v", req.Name, err)
+			}
+		}
+	}
+
 	wg.Add(r.Concurrency)
 
 	// Update VU metrics
@@ -139,14 +191,54 @@ func (r *Runner) executeWithStreaming() error {
 	for i := 0; i < r.Concurrency; i++ {
 		go func(workerID int) {
 			defer wg.Done()
+
+			// Create template engine for this worker, inheriting global state
+			templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
+			templateEngine.SetMetricsCollector(r.MetricsCollector)
+
+			// Copy global state to worker template engine
+			globalStore := globalTemplateEngine.GetGlobalStore()
+			for k, v := range globalStore.GetAll() {
+				templateEngine.GetGlobalStore().Set(k, v)
+			}
+
+			// Register named request functions for this worker too
+			for _, req := range r.Requests {
+				templateEngine.RegisterRequestFunction(req)
+			}
+
+			// Set up request executor for this worker
+			templateEngine.SetRequestExecutor(func(request chttp.Request) (*template.Response, error) {
+				result := r.execute(request, templateEngine, workerID, -1)
+				response := &template.Response{
+					StatusCode: result.StatusCode,
+					Headers:    make(map[string]string),
+				}
+				if result.Success {
+					response.Body = result.Name // This would need to be actual response body
+				} else {
+					response.Body = map[string]interface{}{
+						"error": result.Error,
+					}
+				}
+				return response, nil
+			})
+
 			for j := 0; j < r.Iterations; j++ {
 				iterationStart := time.Now()
-				templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
 
-				// Pass metrics collector to template engine for check access
-				templateEngine.SetMetricsCollector(r.MetricsCollector)
+				// Execute @BeforeIteration scripts before each iteration
+				for _, req := range r.beforeIterationRequests {
+					if req.PreScript != "" || req.Script != "" {
+						script := req.PreScript + "\n" + req.Script
+						if err := templateEngine.ExecuteScript(script, "", workerID, j); err != nil {
+							fmt.Printf("[Worker %d] Error executing @BeforeIteration script for %s: %v\n", workerID, req.Name, err)
+						}
+					}
+				}
 
-				for _, req := range r.Requests {
+				// Execute normal requests
+				for _, req := range r.normalRequests {
 					result := r.execute(req, templateEngine, workerID, j)
 					resultChan <- result
 					if !result.Success {
@@ -156,6 +248,16 @@ func (r *Runner) executeWithStreaming() error {
 					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
 				}
 
+				// Execute @TeardownIteration scripts after each iteration
+				for _, req := range r.teardownIterationRequests {
+					if req.PreScript != "" || req.Script != "" {
+						script := req.PreScript + "\n" + req.Script
+						if err := templateEngine.ExecuteScript(script, "", workerID, j); err != nil {
+							fmt.Printf("[Worker %d] Error executing @TeardownIteration script for %s: %v\n", workerID, req.Name, err)
+						}
+					}
+				}
+
 				// Record iteration metrics
 				iterationDuration := time.Since(iterationStart)
 				tags := map[string]string{
@@ -163,6 +265,16 @@ func (r *Runner) executeWithStreaming() error {
 					"iteration": fmt.Sprintf("%d", j),
 				}
 				r.MetricsCollector.RecordIteration(iterationDuration, tags)
+			}
+
+			// Execute @TeardownUser scripts once after all iterations for this worker
+			for _, req := range r.teardownUserRequests {
+				if req.PreScript != "" || req.Script != "" {
+					script := req.PreScript + "\n" + req.Script
+					if err := templateEngine.ExecuteScript(script, "", workerID, -1); err != nil {
+						fmt.Printf("[Worker %d] Error executing @TeardownUser script for %s: %v\n", workerID, req.Name, err)
+					}
+				}
 			}
 		}(i)
 	}
@@ -191,6 +303,31 @@ func (r *Runner) executeWithStreaming() error {
 	return nil
 }
 
+// categorizeRequests separates requests by their lifecycle annotations
+func (r *Runner) categorizeRequests() {
+	r.beforeUserRequests = make([]chttp.Request, 0)
+	r.beforeIterationRequests = make([]chttp.Request, 0)
+	r.teardownUserRequests = make([]chttp.Request, 0)
+	r.teardownIterationRequests = make([]chttp.Request, 0)
+	r.normalRequests = make([]chttp.Request, 0)
+
+	for _, req := range r.Requests {
+		switch req.Lifecycle {
+		case chttp.LifecycleBeforeUser:
+			r.beforeUserRequests = append(r.beforeUserRequests, req)
+		case chttp.LifecycleBeforeIteration:
+			r.beforeIterationRequests = append(r.beforeIterationRequests, req)
+		case chttp.LifecycleTeardownUser:
+			r.teardownUserRequests = append(r.teardownUserRequests, req)
+		case chttp.LifecycleTeardownIteration:
+			r.teardownIterationRequests = append(r.teardownIterationRequests, req)
+		default:
+			// Normal requests (no lifecycle annotation)
+			r.normalRequests = append(r.normalRequests, req)
+		}
+	}
+}
+
 func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, iterationID int) types.RequestResult {
 	result := types.RequestResult{
 		Name:          req.Name,
@@ -203,7 +340,7 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 
 	// Execute pre-request script if present
 	if req.PreScript != "" {
-		if err := te.ExecuteScript(req.PreScript, ""); err != nil {
+		if err := te.ExecuteScript(req.PreScript, "", virtualUserId, iterationID); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error executing pre-request script: %v", err)
 			return result
@@ -412,7 +549,7 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 
 	// Execute post-request script if present
 	if req.Script != "" {
-		if err := te.ExecuteScript(req.Script, responseBody); err != nil {
+		if err := te.ExecuteScript(req.Script, responseBody, virtualUserId, iterationID); err != nil {
 			result.Success = false
 			result.Error = fmt.Sprintf("error executing script: %v", err)
 			return result
