@@ -1,4 +1,4 @@
-package reporting
+package csv
 
 import (
 	"bytes"
@@ -6,12 +6,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/deicon/httprunner/reporting/types"
 )
 
 // CSVFormatter formats reports as CSV
 type CSVFormatter struct{}
 
-func (f *CSVFormatter) Format(report *Report) (string, error) {
+func (f *CSVFormatter) Format(report *types.Report) (string, error) {
 	var buf bytes.Buffer
 	writer := csv.NewWriter(&buf)
 

@@ -1,4 +1,4 @@
-package reporting
+package console
 
 import (
 	"bytes"
@@ -6,12 +6,13 @@ import (
 	"strings"
 
 	"github.com/deicon/httprunner/metrics"
+	"github.com/deicon/httprunner/reporting/types"
 )
 
 // ConsoleFormatter formats reports for console output
 type ConsoleFormatter struct{}
 
-func (f *ConsoleFormatter) Format(report *Report) (string, error) {
+func (f *ConsoleFormatter) Format(report *types.Report) (string, error) {
 	var buf bytes.Buffer
 
 	buf.WriteString("HTTP Request Report\n")

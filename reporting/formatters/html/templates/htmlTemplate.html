@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HTTP Request Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .metric { display: inline-block; margin-right: 30px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .success { color: green; }
+        .error { color: red; }
+        .distribution, .errors { display: inline-block; vertical-align: top; margin-right: 30px; }
+        .chart { margin: 20px 0; }
+    </style>
+</head>
+<body>
+<h1>HTTP Request Report</h1>
+
+<div class="summary">
+    <div class="metric"><strong>Total Requests:</strong> {{.TotalRequests}}</div>
+    <div class="metric"><strong>Successful:</strong> <span class="success">{{.SuccessfulRequests}}</span></div>
+    <div class="metric"><strong>Failed:</strong> <span class="error">{{.FailedRequests}}</span></div>
+    <div class="metric"><strong>Success Rate:</strong> {{printf "%.1f" .SuccessRate}}%</div>
+</div>
+
+<div class="summary">
+    <div class="metric"><strong>Avg Response Time:</strong> {{.AverageResponseTime}}</div>
+    <div class="metric"><strong>Min Response Time:</strong> {{.MinResponseTime}}</div>
+    <div class="metric"><strong>Max Response Time:</strong> {{.MaxResponseTime}}</div>
+    <div class="metric"><strong>Total Duration:</strong> {{.TotalDuration}}</div>
+</div>
+
+{{if .ResponseTimeDistribution}}
+<div class="chart">
+    <div class="distribution">
+        <h3>Response Time Distribution</h3>
+        <ul>
+            {{range $category, $count := .ResponseTimeDistribution}}
+            {{if gt $count 0}}
+            <li>{{$category}}: {{$count}}</li>
+            {{end}}
+            {{end}}
+        </ul>
+    </div>
+</div>
+{{end}}
+
+{{if .ErrorBreakdown}}
+<div class="chart">
+    <div class="errors">
+        <h3>Error Breakdown</h3>
+        <ul>
+            {{range $error, $count := .ErrorBreakdown}}
+            <li>{{$error}}: {{$count}}</li>
+            {{end}}
+        </ul>
+    </div>
+</div>
+{{end}}
+
+{{if .CheckSummaries}}
+<div class="summary">
+    <div class="metric"><strong>Total Checks:</strong> {{.TotalChecks}}</div>
+    <div class="metric"><strong>Successful Checks:</strong> <span class="success">{{.SuccessfulChecks}}</span></div>
+    <div class="metric"><strong>Failed Checks:</strong> <span class="error">{{.FailedChecks}}</span></div>
+    <div class="metric"><strong>Check Success Rate:</strong> {{if gt .TotalChecks 0}}{{printf "%.1f" .CheckSuccessRate}}%{{else}}N/A{{end}}</div>
+</div>
+
+<div class="chart">
+    <div class="errors">
+        <h3>Check Results</h3>
+        <ul>
+            {{range $name, $summary := .CheckSummaries}}
+            <li>
+                <strong>{{$name}}</strong>: {{$summary.TotalRuns}} runs
+                ({{$summary.SuccessfulRuns}} successful, {{$summary.FailedRuns}} failed)
+                {{if gt (len $summary.FailureMessages) 0}}
+                <br><small>Failure reasons: {{range $i, $msg := $summary.FailureMessages}}{{if $i}}, {{end}}{{$msg}}{{end}}</small>
+                {{end}}
+            </li>
+            {{end}}
+        </ul>
+    </div>
+</div>
+{{end}}
+
+{{if .MetricsSummaries}}
+<div class="summary">
+    <h3>📊 All Collected Metrics</h3>
+
+    <h4>Counters</h4>
+    <table style="margin-bottom: 20px;">
+        <tr><th>Metric</th><th>Value</th><th>Count</th></tr>
+        {{range $name, $summary := .MetricsSummaries}}
+        {{if eq $summary.Type "counter"}}
+        <tr><td>{{$name}}</td><td>{{printf "%.0f" $summary.Sum}}</td><td>{{$summary.Count}}</td></tr>
+        {{end}}
+        {{end}}
+    </table>
+
+    <h4>Trends (Timing/Size Metrics)</h4>
+    <table style="margin-bottom: 20px;">
+        <tr><th>Metric</th><th>Avg</th><th>Min</th><th>Med</th><th>Max</th><th>P90</th><th>P95</th></tr>
+        {{range $name, $summary := .MetricsSummaries}}
+        {{if eq $summary.Type "trend"}}
+        <tr>
+            <td>{{$name}}</td>
+            <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f bytes" $summary.Average}}{{else}}{{printf "%.2f ms" $summary.Average}}{{end}}</td>
+            <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.Min}}{{else}}{{printf "%.2f" $summary.Min}}{{end}}</td>
+            <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.P50}}{{else}}{{printf "%.2f" $summary.P50}}{{end}}</td>
+            <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.Max}}{{else}}{{printf "%.2f" $summary.Max}}{{end}}</td>
+            <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.P90}}{{else}}{{printf "%.2f" $summary.P90}}{{end}}</td>
+            <td>{{if or (eq $name "data_sent") (eq $name "data_received")}}{{printf "%.0f" $summary.P95}}{{else}}{{printf "%.2f" $summary.P95}}{{end}}</td>
+        </tr>
+        {{end}}
+        {{end}}
+    </table>
+
+    <h4>Rates</h4>
+    <table style="margin-bottom: 20px;">
+        <tr><th>Metric</th><th>Rate</th><th>Count</th></tr>
+        {{range $name, $summary := .MetricsSummaries}}
+        {{if eq $summary.Type "rate"}}
+        <tr><td>{{$name}}</td><td>{{printf "%.2f%%" (mul $summary.Average 100.0)}}</td><td>{{$summary.Count}}</td></tr>
+        {{end}}
+        {{end}}
+    </table>
+
+    <h4>Gauges</h4>
+    <table style="margin-bottom: 20px;">
+        <tr><th>Metric</th><th>Average</th><th>Latest</th></tr>
+        {{range $name, $summary := .MetricsSummaries}}
+        {{if eq $summary.Type "gauge"}}
+        <tr><td>{{$name}}</td><td>{{printf "%.0f" $summary.Average}}</td><td>{{printf "%.0f" $summary.LatestValue}}</td></tr>
+        {{end}}
+        {{end}}
+    </table>
+</div>
+{{end}}
+
+<h3>Request Details</h3>
+<table>
+    <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Method</th>
+        <th>URL</th>
+        <th>Status</th>
+        <th>Response Time</th>
+        <th>Checks</th>
+        <th>Timestamp</th>
+    </tr>
+    {{range $index, $req := .RequestDetails}}
+    <tr>
+        <td>{{add $index 1}}</td>
+        <td>{{$req.Name}}</td>
+        <td>{{$req.Verb}}</td>
+        <td>{{$req.URL}}</td>
+        <td>{{if $req.Success}}<span class="success">{{$req.StatusCode}} OK</span>{{else}}<span class="error">{{$req.Error}}</span>{{end}}</td>
+        <td>{{$req.ResponseTime}}</td>
+        <td>
+            {{if gt (len $req.Checks) 0}}
+            {{range $checkIndex, $check := $req.Checks}}
+            {{if gt $checkIndex 0}}<br>{{end}}
+            {{if $check.Success}}
+            <span class="success">✓ {{$check.Name}}</span>
+            {{else}}
+            <span class="error">✗ {{$check.Name}}: {{$check.FailureMessage}}</span>
+            {{end}}
+            {{end}}
+            {{else}}
+            -
+            {{end}}
+        </td>
+        <td>{{$req.Timestamp.Format "2006-01-02 15:04:05"}}</td>
+    </tr>
+    {{end}}
+</table>
+</body>
+</html>

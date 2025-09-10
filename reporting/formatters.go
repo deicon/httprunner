@@ -9,11 +9,16 @@ import (
 	"time"
 
 	"github.com/deicon/httprunner/metrics"
+	"github.com/deicon/httprunner/reporting/formatters/console"
+	"github.com/deicon/httprunner/reporting/formatters/csv"
+	"github.com/deicon/httprunner/reporting/formatters/html"
+	json2 "github.com/deicon/httprunner/reporting/formatters/json"
+	"github.com/deicon/httprunner/reporting/types"
 )
 
 // Formatter interface for different report formats
 type Formatter interface {
-	Format(report *Report) (string, error)
+	Format(report *types.Report) (string, error)
 }
 
 // HTMLFormatter.Format moved to formatter_html.go
@@ -21,21 +26,21 @@ type Formatter interface {
 // JSON formatter moved
 
 // GetFormatter returns the appropriate formatter for the given format
-func GetFormatter(format ReportFormat) Formatter {
+func GetFormatter(format types.ReportFormat) Formatter {
 	switch format {
-	case FormatHTML:
-		return &HTMLFormatter{}
-	case FormatCSV:
-		return &CSVFormatter{}
-	case FormatJSON:
-		return &JSONFormatter{}
+	case types.FormatHTML:
+		return &html.HTMLFormatter{}
+	case types.FormatCSV:
+		return &csv.CSVFormatter{}
+	case types.FormatJSON:
+		return &json2.JSONFormatter{}
 	default:
-		return &ConsoleFormatter{}
+		return &console.ConsoleFormatter{}
 	}
 }
 
 // WriteReportToFile writes a formatted report to a file
-func WriteReportToFile(report *Report, format ReportFormat, filename string) error {
+func WriteReportToFile(report *types.Report, format types.ReportFormat, filename string) error {
 	formatter := GetFormatter(format)
 	content, err := formatter.Format(report)
 	if err != nil {
@@ -51,17 +56,17 @@ func writeStringToFile(content, filename string) error {
 
 // HierarchicalFormatter formats hierarchical reports based on detail level
 type HierarchicalFormatter struct {
-	DetailLevel ReportDetailLevel
-	Format      ReportFormat
+	DetailLevel types.ReportDetailLevel
+	Format      types.ReportFormat
 }
 
-func (f *HierarchicalFormatter) FormatHierarchical(report *HierarchicalReport) (string, error) {
+func (f *HierarchicalFormatter) FormatHierarchical(report *types.HierarchicalReport) (string, error) {
 	switch f.Format {
-	case FormatConsole:
+	case types.FormatConsole:
 		return f.formatHierarchicalConsole(report)
-	case FormatHTML:
+	case types.FormatHTML:
 		return f.formatHierarchicalHTML(report)
-	case FormatJSON:
+	case types.FormatJSON:
 		return f.formatHierarchicalJSON(report)
 	default:
 		// Fallback to regular console format
@@ -69,7 +74,7 @@ func (f *HierarchicalFormatter) FormatHierarchical(report *HierarchicalReport) (
 	}
 }
 
-func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalReport) (string, error) {
+func (f *HierarchicalFormatter) formatHierarchicalConsole(report *types.HierarchicalReport) (string, error) {
 	var buf bytes.Buffer
 
 	// Always show summary
@@ -188,7 +193,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 	}
 
 	// Show goroutine details if requested
-	if f.DetailLevel == DetailVirtualuser || f.DetailLevel == DetailIteration || f.DetailLevel == DetailFull {
+	if f.DetailLevel == types.DetailVirtualuser || f.DetailLevel == types.DetailIteration || f.DetailLevel == types.DetailFull {
 		buf.WriteString("Goroutine Breakdown\n")
 		buf.WriteString("===================\n\n")
 
@@ -205,7 +210,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 	}
 
 	// Show iteration details if requested
-	if f.DetailLevel == DetailIteration || f.DetailLevel == DetailFull {
+	if f.DetailLevel == types.DetailIteration || f.DetailLevel == types.DetailFull {
 		buf.WriteString("Iteration Breakdown\n")
 		buf.WriteString("===================\n\n")
 
@@ -239,7 +244,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 	}
 
 	// Show full request details if requested
-	if f.DetailLevel == DetailFull {
+	if f.DetailLevel == types.DetailFull {
 		buf.WriteString("Request Details\n")
 		buf.WriteString("===============\n\n")
 
@@ -279,7 +284,7 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *HierarchicalRe
 	return buf.String(), nil
 }
 
-func (f *HierarchicalFormatter) formatHierarchicalJSON(report *HierarchicalReport) (string, error) {
+func (f *HierarchicalFormatter) formatHierarchicalJSON(report *types.HierarchicalReport) (string, error) {
 	// Create structured JSON based on detail level
 	output := map[string]interface{}{
 		"summary": map[string]interface{}{
@@ -296,7 +301,7 @@ func (f *HierarchicalFormatter) formatHierarchicalJSON(report *HierarchicalRepor
 		},
 	}
 
-	if f.DetailLevel == DetailVirtualuser || f.DetailLevel == DetailIteration || f.DetailLevel == DetailFull {
+	if f.DetailLevel == types.DetailVirtualuser || f.DetailLevel == types.DetailIteration || f.DetailLevel == types.DetailFull {
 		goroutines := make([]map[string]interface{}, 0, len(report.VirtualUserReports))
 		for _, gr := range report.VirtualUserReports {
 			goroutine := map[string]interface{}{
@@ -311,7 +316,7 @@ func (f *HierarchicalFormatter) formatHierarchicalJSON(report *HierarchicalRepor
 				"totalDuration":        gr.TotalDuration.String(),
 			}
 
-			if f.DetailLevel == DetailIteration || f.DetailLevel == DetailFull {
+			if f.DetailLevel == types.DetailIteration || f.DetailLevel == types.DetailFull {
 				iterations := make([]map[string]interface{}, 0, len(gr.Iterations))
 				for _, iter := range gr.Iterations {
 					iteration := map[string]interface{}{
@@ -323,7 +328,7 @@ func (f *HierarchicalFormatter) formatHierarchicalJSON(report *HierarchicalRepor
 						"totalDuration":       iter.TotalDuration.String(),
 					}
 
-					if f.DetailLevel == DetailFull {
+					if f.DetailLevel == types.DetailFull {
 						iteration["requestResults"] = iter.RequestResults
 					}
 
@@ -345,7 +350,7 @@ func (f *HierarchicalFormatter) formatHierarchicalJSON(report *HierarchicalRepor
 	return string(jsonBytes), nil
 }
 
-func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalReport) (string, error) {
+func (f *HierarchicalFormatter) formatHierarchicalHTML(report *types.HierarchicalReport) (string, error) {
 	const hierarchicalHTMLTemplate = `<!DOCTYPE html>
 <html>
 <head>
@@ -755,7 +760,7 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
 			return a / b
 		},
 		"float64": func(i int) float64 { return float64(i) },
-		"collectFailedChecks": func(requests []RequestResult) string {
+		"collectFailedChecks": func(requests []types.RequestResult) string {
 			var failedChecks []string
 			for _, request := range requests {
 				for _, check := range request.Checks {
@@ -776,7 +781,7 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
 
 	// Prepare template data
 	data := struct {
-		*HierarchicalReport
+		*types.HierarchicalReport
 		SuccessRate   float64
 		TotalDuration time.Duration
 		DetailLevel   string

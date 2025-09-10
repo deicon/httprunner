@@ -1,14 +1,16 @@
-package reporting
+package json
 
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/deicon/httprunner/reporting/types"
 )
 
 // JSONFormatter formats reports as JSON
 type JSONFormatter struct{}
 
-func (f *JSONFormatter) Format(report *Report) (string, error) {
+func (f *JSONFormatter) Format(report *types.Report) (string, error) {
 	// Create a more structured JSON output
 	output := map[string]interface{}{
 		"summary": map[string]interface{}{

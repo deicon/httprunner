@@ -1,4 +1,4 @@
-package reporting
+package types
 
 import (
 	"time"
