@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/deicon/httprunner/metrics"
+	"github.com/deicon/httprunner/reporting/types"
 )
 
 // FileReporter generates reports from streamed result files
@@ -23,12 +25,12 @@ func NewFileReporter(resultsFilePath string) *FileReporter {
 }
 
 // GenerateReport creates a comprehensive report by streaming from the results file
-func (fr *FileReporter) GenerateReport(startTime time.Time) (*Report, error) {
+func (fr *FileReporter) GenerateReport(startTime time.Time) (*types.Report, error) {
 	return fr.generateReportStreaming(startTime)
 }
 
 // generateReportStreaming processes the results file line by line to avoid memory issues
-func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, error) {
+func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*types.Report, error) {
 	file, err := os.Open(fr.resultsFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open results file: %v", err)
@@ -37,11 +39,11 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 		_ = file.Close() // Ignore close error for read-only operations
 	}()
 
-	report := &Report{
+	report := &types.Report{
 		ResponseTimeDistribution: make(map[string]int),
 		ErrorBreakdown:           make(map[string]int),
-		CheckSummaries:           make(map[string]CheckSummary),
-		RequestDetails:           make([]RequestResult, 0),
+		CheckSummaries:           make(map[string]types.CheckSummary),
+		RequestDetails:           make([]types.RequestResult, 0),
 		StartTime:                startTime,
 		EndTime:                  time.Now(),
 		MinResponseTime:          time.Hour, // Initialize to high value
@@ -58,7 +60,7 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 			continue
 		}
 
-		var result RequestResult
+		var result types.RequestResult
 		if err := json.Unmarshal([]byte(line), &result); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal result: %v", err)
 		}
@@ -108,7 +110,7 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 			// Update check summary
 			checkSummary, exists := report.CheckSummaries[check.Name]
 			if !exists {
-				checkSummary = CheckSummary{
+				checkSummary = types.CheckSummary{
 					Name:            check.Name,
 					FailureMessages: make([]string, 0),
 				}
@@ -155,12 +157,12 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*Report, e
 }
 
 // GenerateHierarchicalReport creates a hierarchical report by streaming from the results file
-func (fr *FileReporter) GenerateHierarchicalReport(startTime time.Time) (*HierarchicalReport, error) {
+func (fr *FileReporter) GenerateHierarchicalReport(startTime time.Time) (*types.HierarchicalReport, error) {
 	return fr.generateHierarchicalReportStreaming(startTime)
 }
 
 // generateHierarchicalReportStreaming processes results in a single pass to optimize performance
-func (fr *FileReporter) generateHierarchicalReportStreaming(startTime time.Time) (*HierarchicalReport, error) {
+func (fr *FileReporter) generateHierarchicalReportStreaming(startTime time.Time) (*types.HierarchicalReport, error) {
 	// Single pass through the file to collect all necessary data
 	summaryData, goroutineData, err := fr.collectAllDataInSinglePass()
 	if err != nil {
@@ -171,9 +173,9 @@ func (fr *FileReporter) generateHierarchicalReportStreaming(startTime time.Time)
 	summaryReport := fr.buildSummaryFromData(summaryData, startTime)
 
 	// Build hierarchical report from goroutine data
-	hierarchical := &HierarchicalReport{
+	hierarchical := &types.HierarchicalReport{
 		Summary:            summaryReport,
-		VirtualUserReports: make([]GoroutineReport, 0, len(goroutineData)),
+		VirtualUserReports: make([]types.GoroutineReport, 0, len(goroutineData)),
 		TotalVirtualUsers:  len(goroutineData),
 	}
 
@@ -202,11 +204,11 @@ type summaryData struct {
 	maxResponseTime          time.Duration
 	responseTimeDistribution map[string]int
 	errorBreakdown           map[string]int
-	checkSummaries           map[string]CheckSummary
+	checkSummaries           map[string]types.CheckSummary
 	totalChecks              int
 	successfulChecks         int
 	failedChecks             int
-	requestDetails           []RequestResult
+	requestDetails           []types.RequestResult
 }
 
 // iterationData holds aggregated data for an iteration
@@ -240,8 +242,8 @@ func (fr *FileReporter) collectAllDataInSinglePass() (*summaryData, map[int]*gor
 		minResponseTime:          time.Hour, // Initialize to high value
 		responseTimeDistribution: make(map[string]int),
 		errorBreakdown:           make(map[string]int),
-		checkSummaries:           make(map[string]CheckSummary),
-		requestDetails:           make([]RequestResult, 0),
+		checkSummaries:           make(map[string]types.CheckSummary),
+		requestDetails:           make([]types.RequestResult, 0),
 	}
 
 	// Initialize goroutine data map
@@ -255,7 +257,7 @@ func (fr *FileReporter) collectAllDataInSinglePass() (*summaryData, map[int]*gor
 			continue
 		}
 
-		var result RequestResult
+		var result types.RequestResult
 		if err := json.Unmarshal([]byte(line), &result); err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal result: %v", err)
 		}
@@ -280,7 +282,7 @@ func (fr *FileReporter) collectAllDataInSinglePass() (*summaryData, map[int]*gor
 }
 
 // updateSummaryData updates the summary data with a single result
-func (fr *FileReporter) updateSummaryData(summary *summaryData, result RequestResult) {
+func (fr *FileReporter) updateSummaryData(summary *summaryData, result types.RequestResult) {
 	summary.totalRequests++
 	summary.totalResponseTime += result.ResponseTime
 
@@ -325,7 +327,7 @@ func (fr *FileReporter) updateSummaryData(summary *summaryData, result RequestRe
 		// Update check summary
 		checkSummary, exists := summary.checkSummaries[check.Name]
 		if !exists {
-			checkSummary = CheckSummary{
+			checkSummary = types.CheckSummary{
 				Name:            check.Name,
 				FailureMessages: make([]string, 0),
 			}
@@ -359,7 +361,7 @@ func containsString(slice []string, item string) bool {
 }
 
 // updateGoroutineData updates the goroutine data with a single result
-func (fr *FileReporter) updateGoroutineData(goroutines map[int]*goroutineData, result RequestResult) {
+func (fr *FileReporter) updateGoroutineData(goroutines map[int]*goroutineData, result types.RequestResult) {
 	// Initialize goroutine if needed
 	if goroutines[result.VirtualUserID] == nil {
 		goroutines[result.VirtualUserID] = &goroutineData{
@@ -398,8 +400,8 @@ func (fr *FileReporter) updateGoroutineData(goroutines map[int]*goroutineData, r
 }
 
 // buildSummaryFromData builds a summary report from collected data
-func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime time.Time) Report {
-	report := Report{
+func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime time.Time) types.Report {
+	report := types.Report{
 		TotalRequests:            summary.totalRequests,
 		SuccessfulRequests:       summary.successfulRequests,
 		FailedRequests:           summary.failedRequests,
@@ -426,10 +428,10 @@ func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime tim
 }
 
 // buildGoroutineReportFromDataWithResults builds a goroutine report from collected data including request results
-func (fr *FileReporter) buildGoroutineReportFromDataWithResults(goroutineID int, goroutineData *goroutineData, allRequestResults []RequestResult) GoroutineReport {
-	report := GoroutineReport{
+func (fr *FileReporter) buildGoroutineReportFromDataWithResults(goroutineID int, goroutineData *goroutineData, allRequestResults []types.RequestResult) types.GoroutineReport {
+	report := types.GoroutineReport{
 		GoroutineID:     goroutineID,
-		Iterations:      make([]IterationReport, 0, len(goroutineData.iterations)),
+		Iterations:      make([]types.IterationReport, 0, len(goroutineData.iterations)),
 		TotalIterations: len(goroutineData.iterations),
 		StartTime:       time.Now(),
 		EndTime:         time.Time{},
@@ -437,17 +439,25 @@ func (fr *FileReporter) buildGoroutineReportFromDataWithResults(goroutineID int,
 
 	var totalResponseTime time.Duration
 
+	// Sort iterations by ID to ensure consistent order
+	iterationIDs := make([]int, 0, len(goroutineData.iterations))
+	for id := range goroutineData.iterations {
+		iterationIDs = append(iterationIDs, id)
+	}
+	sort.Ints(iterationIDs)
+
 	// Process each iteration
-	for _, iteration := range goroutineData.iterations {
+	for _, iterationID := range iterationIDs {
+		iteration := goroutineData.iterations[iterationID]
 		// Find request results for this specific goroutine and iteration
-		var iterationRequestResults []RequestResult
+		var iterationRequestResults []types.RequestResult
 		for _, result := range allRequestResults {
 			if result.VirtualUserID == goroutineID && result.IterationID == iteration.iterationID {
 				iterationRequestResults = append(iterationRequestResults, result)
 			}
 		}
 
-		iterationReport := IterationReport{
+		iterationReport := types.IterationReport{
 			IterationID:        iteration.iterationID,
 			RequestResults:     iterationRequestResults, // Now populated with actual results
 			TotalRequests:      iteration.totalRequests,

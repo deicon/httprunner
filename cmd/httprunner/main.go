@@ -9,6 +9,8 @@ import (
 
 	"github.com/deicon/httprunner/parser"
 	"github.com/deicon/httprunner/reporting"
+	"github.com/deicon/httprunner/reporting/formatters/hierarchical"
+	"github.com/deicon/httprunner/reporting/types"
 	"github.com/deicon/httprunner/runner"
 )
 
@@ -31,9 +33,9 @@ func main() {
 	}
 
 	// Validate report format
-	format := reporting.ReportFormat(strings.ToLower(*reportFormat))
+	format := types.ReportFormat(strings.ToLower(*reportFormat))
 	switch format {
-	case reporting.FormatConsole, reporting.FormatHTML, reporting.FormatCSV, reporting.FormatJSON:
+	case types.FormatConsole, types.FormatHTML, types.FormatCSV, types.FormatJSON:
 		// valid format
 	default:
 		fmt.Printf("Error: Invalid report format '%s'. Valid formats: console, html, csv, json\n", *reportFormat)
@@ -41,9 +43,9 @@ func main() {
 	}
 
 	// Validate report detail level
-	detailLevel := reporting.ReportDetailLevel(strings.ToLower(*reportDetail))
+	detailLevel := types.ReportDetailLevel(strings.ToLower(*reportDetail))
 	switch detailLevel {
-	case reporting.DetailSummary, reporting.DetailVirtualuser, reporting.DetailIteration, reporting.DetailFull:
+	case types.DetailSummary, types.DetailVirtualuser, types.DetailIteration, types.DetailFull:
 		// valid detail level
 	default:
 		fmt.Printf("Error: Invalid report detail level '%s'. Valid levels: summary, goroutine, iteration, full\n", *reportDetail)
@@ -72,7 +74,7 @@ func main() {
 	// Generate appropriate report based on detail level
 	var reportContent string
 
-	if detailLevel == reporting.DetailSummary {
+	if detailLevel == types.DetailSummary {
 		report, streamErr := r.Run()
 		if streamErr != nil {
 			fmt.Printf("Error running execution: %v\n", streamErr)
@@ -86,7 +88,7 @@ func main() {
 			fmt.Printf("Error running hierarchical execution: %v\n", streamErr)
 			os.Exit(1)
 		}
-		hierarchicalFormatter := &reporting.HierarchicalFormatter{
+		hierarchicalFormatter := &hierarchical.HierarchicalFormatter{
 			DetailLevel: detailLevel,
 			Format:      format,
 		}
@@ -99,18 +101,18 @@ func main() {
 	}
 
 	// Output report - always save to file and print to stdout for console format
-	if format == reporting.FormatConsole {
+	if format == types.FormatConsole {
 		// For console format, print to stdout
 		fmt.Print(reportContent)
 	} else {
 		// For other formats, save to file
 		filename := filepath.Join(*reportOutput, "report")
 		switch format {
-		case reporting.FormatHTML:
+		case types.FormatHTML:
 			filename += ".html"
-		case reporting.FormatCSV:
+		case types.FormatCSV:
 			filename += ".csv"
-		case reporting.FormatJSON:
+		case types.FormatJSON:
 			filename += ".json"
 		default:
 			filename += ".txt"

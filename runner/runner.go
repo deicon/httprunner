@@ -11,6 +11,8 @@ import (
 	chttp "github.com/deicon/httprunner/http"
 	"github.com/deicon/httprunner/metrics"
 	"github.com/deicon/httprunner/reporting"
+	"github.com/deicon/httprunner/reporting/streaming"
+	"github.com/deicon/httprunner/reporting/types"
 	"github.com/deicon/httprunner/template"
 )
 
@@ -21,14 +23,14 @@ type Runner struct {
 	Delay              int
 	Requests           []chttp.Request
 	envFile            string
-	StreamingCollector *reporting.StreamingCollector
+	StreamingCollector *streaming.StreamingCollector
 	OutputDir          string
 	MetricsCollector   *metrics.MetricsCollector
 }
 
 // NewRunner creates a new Runner with file streaming for memory efficiency
 func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, outputDir string) (*Runner, error) {
-	streamingCollector, err := reporting.NewStreamingCollector(outputDir)
+	streamingCollector, err := streaming.NewStreamingCollector(outputDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create streaming collector: %v", err)
 	}
@@ -48,7 +50,7 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, out
 
 // NewRunnerWithEnvFile creates a new Runner with streaming and env file support
 func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.Request, envFile, outputDir string) (*Runner, error) {
-	streamingCollector, err := reporting.NewStreamingCollector(outputDir)
+	streamingCollector, err := streaming.NewStreamingCollector(outputDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create streaming collector: %v", err)
 	}
@@ -68,7 +70,7 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 }
 
 // Run executes requests with file streaming to reduce memory usage
-func (r *Runner) Run() (*reporting.Report, error) {
+func (r *Runner) Run() (*types.Report, error) {
 	if r.StreamingCollector == nil {
 		return nil, fmt.Errorf("streaming collector not initialized, use NewStreamingRunner")
 	}
@@ -93,7 +95,7 @@ func (r *Runner) Run() (*reporting.Report, error) {
 }
 
 // RunHierarchical executes requests with file streaming and returns hierarchical report
-func (r *Runner) RunHierarchical() (*reporting.HierarchicalReport, error) {
+func (r *Runner) RunHierarchical() (*types.HierarchicalReport, error) {
 	if r.StreamingCollector == nil {
 		return nil, fmt.Errorf("streaming collector not initialized, use NewStreamingRunner")
 	}
@@ -120,7 +122,7 @@ func (r *Runner) RunHierarchical() (*reporting.HierarchicalReport, error) {
 // executeWithStreaming contains the common streaming execution pattern
 func (r *Runner) executeWithStreaming() error {
 	var wg sync.WaitGroup
-	resultChan := make(chan reporting.RequestResult, 1000)
+	resultChan := make(chan types.RequestResult, 1000)
 
 	wg.Add(r.Concurrency)
 
@@ -142,7 +144,7 @@ func (r *Runner) executeWithStreaming() error {
 					resultChan <- result
 					if !result.Success {
 						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, result.Error, j+1)
-						return
+						break
 					}
 					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
 				}
@@ -179,8 +181,8 @@ func (r *Runner) executeWithStreaming() error {
 	return nil
 }
 
-func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, iterationID int) reporting.RequestResult {
-	result := reporting.RequestResult{
+func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, iterationID int) types.RequestResult {
+	result := types.RequestResult{
 		Name:          req.Name,
 		Verb:          req.Verb,
 		URL:           req.URL,

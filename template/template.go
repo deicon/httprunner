@@ -13,7 +13,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/deicon/httprunner/metrics"
-	"github.com/deicon/httprunner/reporting"
+	"github.com/deicon/httprunner/reporting/types"
 	"github.com/dop251/goja"
 )
 
@@ -117,7 +117,7 @@ func (gs *GlobalStore) GetAll() map[string]interface{} {
 // TemplateEngine handles template rendering and JavaScript execution
 type Engine struct {
 	globalStore      *GlobalStore
-	checks           []reporting.CheckResult
+	checks           []types.CheckResult
 	checksMu         sync.Mutex
 	metricsCollector *metrics.MetricsCollector
 }
@@ -126,7 +126,7 @@ type Engine struct {
 func NewTemplateEngine() *Engine {
 	return &Engine{
 		globalStore: NewGlobalStore(),
-		checks:      make([]reporting.CheckResult, 0),
+		checks:      make([]types.CheckResult, 0),
 	}
 }
 
@@ -140,7 +140,7 @@ func NewTemplateEngineWithEnvFile(envFile string) (*Engine, error) {
 	}
 	return &Engine{
 		globalStore: store,
-		checks:      make([]reporting.CheckResult, 0),
+		checks:      make([]types.CheckResult, 0),
 	}, nil
 }
 
@@ -182,7 +182,7 @@ func (te *Engine) ExecuteScript(script string, responseBody string) error {
 		success := checkHandler()
 		te.checksMu.Lock()
 		defer te.checksMu.Unlock()
-		te.checks = append(te.checks, reporting.CheckResult{
+		te.checks = append(te.checks, types.CheckResult{
 			Name:           name,
 			Success:        success,
 			FailureMessage: failureMessage,
@@ -317,11 +317,11 @@ func (te *Engine) SetMetricsCollector(collector *metrics.MetricsCollector) {
 }
 
 // GetChecks returns the current checks and clears the internal list
-func (te *Engine) GetChecks() []reporting.CheckResult {
+func (te *Engine) GetChecks() []types.CheckResult {
 	te.checksMu.Lock()
 	defer te.checksMu.Unlock()
 
-	checks := make([]reporting.CheckResult, len(te.checks))
+	checks := make([]types.CheckResult, len(te.checks))
 	copy(checks, te.checks)
 	te.checks = te.checks[:0] // Clear the slice
 

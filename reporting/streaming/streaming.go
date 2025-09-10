@@ -1,4 +1,4 @@
-package reporting
+package streaming
 
 import (
 	"bufio"
@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/deicon/httprunner/reporting/types"
 )
 
 // StreamingCollector writes results to files as they arrive to reduce memory usage
@@ -48,7 +50,7 @@ func NewStreamingCollector(outputDir string) (*StreamingCollector, error) {
 }
 
 // AddResult writes a request result immediately to file
-func (sc *StreamingCollector) AddResult(result RequestResult) error {
+func (sc *StreamingCollector) AddResult(result types.RequestResult) error {
 	// Convert result to JSON and write to file
 	data, err := json.Marshal(result)
 	if err != nil {
