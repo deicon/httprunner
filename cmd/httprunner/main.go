@@ -9,6 +9,7 @@ import (
 
 	"github.com/deicon/httprunner/parser"
 	"github.com/deicon/httprunner/reporting"
+	"github.com/deicon/httprunner/reporting/formatters/hierarchical"
 	"github.com/deicon/httprunner/reporting/types"
 	"github.com/deicon/httprunner/runner"
 )
@@ -87,7 +88,7 @@ func main() {
 			fmt.Printf("Error running hierarchical execution: %v\n", streamErr)
 			os.Exit(1)
 		}
-		hierarchicalFormatter := &reporting.HierarchicalFormatter{
+		hierarchicalFormatter := &hierarchical.HierarchicalFormatter{
 			DetailLevel: detailLevel,
 			Format:      format,
 		}

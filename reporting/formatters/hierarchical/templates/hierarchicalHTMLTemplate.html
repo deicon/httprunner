@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HTTP Request Report - Hierarchical</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .summary {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .metric {
+            display: inline-block;
+            margin-right: 30px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        .metric strong { color: #495057; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+
+        /* Collapsible sections */
+        .collapsible {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            padding: 15px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 5px;
+            margin: 5px 0;
+            transition: background-color 0.3s;
+        }
+        .collapsible:hover { background-color: #0056b3; }
+        .collapsible.active { background-color: #0056b3; }
+
+        .content {
+            padding: 0;
+            display: none;
+            overflow: hidden;
+            background-color: white;
+            border-radius: 0 0 5px 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .content.show { display: block; padding: 15px; }
+
+        .goroutine-header {
+            background-color: #6c757d;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 10px 0 5px 0;
+        }
+        .iteration-header {
+            background-color: #17a2b8;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 8px 0 5px 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+            background: white;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        th, td {
+            border: 1px solid #dee2e6;
+            padding: 12px 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #e9ecef;
+            font-weight: bold;
+            color: #495057;
+        }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        tr:hover { background-color: #e8f4f8; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #007bff;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 5px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #28a745;
+            transition: width 0.3s ease;
+        }
+
+        .request-details {
+            margin: 20px 0;
+        }
+        .url {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #6c757d;
+        }
+    </style>
+    <script>
+        function toggleCollapsible(element) {
+            element.classList.toggle("active");
+            var content = element.nextElementSibling;
+            if (content.classList.contains("show")) {
+                content.classList.remove("show");
+            } else {
+                content.classList.add("show");
+            }
+        }
+
+        function expandAll() {
+            var collapsibles = document.getElementsByClassName("collapsible");
+            var contents = document.getElementsByClassName("content");
+            for (var i = 0; i < collapsibles.length; i++) {
+                collapsibles[i].classList.add("active");
+                contents[i].classList.add("show");
+            }
+        }
+
+        function collapseAll() {
+            var collapsibles = document.getElementsByClassName("collapsible");
+            var contents = document.getElementsByClassName("content");
+            for (var i = 0; i < collapsibles.length; i++) {
+                collapsibles[i].classList.remove("active");
+                contents[i].classList.remove("show");
+            }
+        }
+    </script>
+</head>
+<body>
+<div class="header">
+    <h1>🚀 HTTP Request Report - Hierarchical View</h1>
+    <p>Generated on {{.Summary.StartTime.Format "2006-01-02 15:04:05"}}</p>
+</div>
+
+<div style="margin-bottom: 15px;">
+    <button onclick="expandAll()" style="background:#28a745;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;margin-right:10px;">Expand All</button>
+    <button onclick="collapseAll()" style="background:#6c757d;color:white;border:none;padding:8px 15px;border-radius:4px;cursor:pointer;">Collapse All</button>
+</div>
+
+<div class="summary">
+    <h2>📊 Overall Summary</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{.TotalVirtualUsers}}</div>
+            <div class="stat-label">Total VirtualUserReports</div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: 100%;"></div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value success">{{.SuccessfulVirtualUsers}}</div>
+            <div class="stat-label">Successful VirtualUserReports</div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{if gt .TotalVirtualUsers 0}}{{printf "%.0f" (mul (div (float64 .SuccessfulVirtualUsers) (float64 .TotalVirtualUsers)) 100.0)}}{{else}}0{{end}}%;"></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{.Summary.TotalRequests}}</div>
+        <div class="stat-label">Total Requests</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value success">{{.Summary.SuccessfulRequests}}</div>
+        <div class="stat-label">Successful Requests</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value error">{{.Summary.FailedRequests}}</div>
+        <div class="stat-label">Failed Requests</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{.Summary.AverageResponseTime}}</div>
+        <div class="stat-label">Avg Response Time</div>
+    </div>
+</div>
+
+<div style="margin-top: 20px;">
+    <div class="metric">
+        <strong>Success Rate:</strong>
+        <span class="{{if ge .SuccessRate 90.0}}success{{else if ge .SuccessRate 70.0}}warning{{else}}error{{end}}">
+                    {{printf "%.1f" .SuccessRate}}%
+                </span>
+    </div>
+    <div class="metric"><strong>Total Duration:</strong> {{.TotalDuration}}</div>
+    <div class="metric"><strong>Min Response:</strong> {{.Summary.MinResponseTime}}</div>
+    <div class="metric"><strong>Max Response:</strong> {{.Summary.MaxResponseTime}}</div>
+</div>
+</div>
+
+{{if gt .Summary.TotalChecks 0}}
+<div class="summary">
+    <h2>✅ Check Results</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{.Summary.TotalChecks}}</div>
+            <div class="stat-label">Total Checks</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value success">{{.Summary.SuccessfulChecks}}</div>
+            <div class="stat-label">Successful Checks</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value error">{{.Summary.FailedChecks}}</div>
+            <div class="stat-label">Failed Checks</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{if gt .Summary.TotalChecks 0}}{{printf "%.1f" (mul (div (float64 .Summary.SuccessfulChecks) (float64 .Summary.TotalChecks)) 100.0)}}%{{else}}N/A{{end}}</div>
+            <div class="stat-label">Check Success Rate</div>
+        </div>
+    </div>
+
+    <button class="collapsible" onclick="toggleCollapsible(this)" style="background-color: #28a745; margin: 15px 0;">
+        📋 Check Breakdown
+    </button>
+    <div class="content">
+        {{range $name, $summary := .Summary.CheckSummaries}}
+        <div style="padding: 10px; border-left: 4px solid {{if gt $summary.FailedRuns 0}}#dc3545{{else}}#28a745{{end}}; margin: 5px 0; background: #f8f9fa;">
+            <strong>{{$name}}</strong><br>
+            <small>{{$summary.TotalRuns}} runs ({{$summary.SuccessfulRuns}} successful, {{$summary.FailedRuns}} failed)</small>
+            {{if gt (len $summary.FailureMessages) 0}}
+            <br><small style="color: #dc3545;"><strong>Failures:</strong> {{range $i, $msg := $summary.FailureMessages}}{{if $i}}, {{end}}{{$msg}}{{end}}</small>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{if or (eq .DetailLevel "virtualuser") (eq .DetailLevel "iteration") (eq .DetailLevel "full")}}
+<button class="collapsible" onclick="toggleCollapsible(this)">
+    🔧 VirtualUser Breakdown ({{len .VirtualUserReports}} goroutines)
+</button>
+<div class="content">
+    {{range $goroutineIndex, $goroutine := .VirtualUserReports}}
+    <div class="goroutine-header">
+        <strong>VirtualUser {{$goroutine.GoroutineID}}</strong>
+        - {{$goroutine.TotalRequests}} requests
+        - {{printf "%.1f" (mul (div (float64 $goroutine.SuccessfulRequests) (float64 $goroutine.TotalRequests)) 100.0)}}% success rate
+        - Avg: {{$goroutine.AverageResponseTime}}
+    </div>
+
+    <div style="margin-left: 20px;">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{$goroutine.TotalIterations}}</div>
+                <div class="stat-label">Iterations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value success">{{$goroutine.SuccessfulIterations}}</div>
+                <div class="stat-label">Successful</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value error">{{$goroutine.FailedIterations}}</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{$goroutine.TotalDuration}}</div>
+                <div class="stat-label">Duration</div>
+            </div>
+        </div>
+
+        {{if or (eq $.DetailLevel "iteration") (eq $.DetailLevel "full")}}
+        {{if gt (len $goroutine.Iterations) 0}}
+        <button class="collapsible" onclick="toggleCollapsible(this)" style="background-color: #17a2b8; margin-left: 0;">
+            📋 Iteration Details ({{len $goroutine.Iterations}} iterations)
+        </button>
+        <div class="content">
+            {{range $iterationIndex, $iteration := $goroutine.Iterations}}
+            <div class="iteration-header">
+                <strong>Iteration {{$iteration.IterationID}}</strong>
+                - {{$iteration.TotalRequests}} requests
+                - {{if gt $iteration.TotalRequests 0}}{{printf "%.1f" (mul (div (float64 $iteration.SuccessfulRequests) (float64 $iteration.TotalRequests)) 100.0)}}%{{else}}0%{{end}} success
+                - {{$iteration.AverageResponseTime}} avg
+                - {{$iteration.TotalDuration}} duration
+            </div>
+
+            {{if eq $.DetailLevel "full"}}
+            {{if gt (len $iteration.RequestResults) 0}}
+            <div style="margin-left: 40px;">
+                <table>
+                    <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Method</th>
+                        <th>URL</th>
+                        <th>Status</th>
+                        <th>Response Time</th>
+                        <th>Checks</th>
+                        <th>Timestamp</th>
+                    </tr>
+                    {{range $requestIndex, $request := $iteration.RequestResults}}
+                    <tr>
+                        <td>{{add $requestIndex 1}}</td>
+                        <td>{{$request.Name}}</td>
+                        <td><strong>{{$request.Verb}}</strong></td>
+                        <td class="url" title="{{$request.URL}}">{{$request.URL}}</td>
+                        <td>
+                            {{if $request.Success}}
+                            <span class="success">{{$request.StatusCode}} ✓</span>
+                            {{else}}
+                            <span class="error">{{$request.Error}} ✗</span>
+                            {{end}}
+                        </td>
+                        <td>{{$request.ResponseTime}}</td>
+                        <td>
+                            {{if gt (len $request.Checks) 0}}
+                            {{range $checkIndex, $check := $request.Checks}}
+                            {{if gt $checkIndex 0}}<br>{{end}}
+                            {{if $check.Success}}
+                            <span class="success">✓ {{$check.Name}}</span>
+                            {{else}}
+                            <span class="error">✗ {{$check.Name}}: {{$check.FailureMessage}}</span>
+                            {{end}}
+                            {{end}}
+                            {{else}}
+                            -
+                            {{end}}
+                        </td>
+                        <td class="timestamp">{{$request.Timestamp.Format "15:04:05.000"}}</td>
+                    </tr>
+                    {{end}}
+                </table>
+            </div>
+            {{end}}
+            {{end}}
+            {{end}}
+        </div>
+        {{end}}
+        {{end}}
+    </div>
+    {{end}}
+</div>
+{{end}}
+
+<div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+    <small style="color: #6c757d;">
+        🎯 Tip: Click on section headers to expand/collapse details.
+        Use "Expand All" / "Collapse All" buttons for bulk operations.
+    </small>
+</div>
+</body>
+</html>
