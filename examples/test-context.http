@@ -1,0 +1,36 @@
+###
+# @name Test Context Access
+> {%
+// Pre-request script: Access user and iteration context
+console.log("Pre-request: Virtual User ID = " + context.userId);
+console.log("Pre-request: Iteration ID = " + context.iterationId);
+client.global.set("pre_user_id", context.userId);
+client.global.set("pre_iteration_id", context.iterationId);
+%}
+
+GET https://httpbin.org/uuid
+Accept: application/json
+
+> {%
+// Post-request script: Access user and iteration context 
+console.log("Post-request: Virtual User ID = " + context.userId);
+console.log("Post-request: Iteration ID = " + context.iterationId);
+
+// Verify the values are consistent between pre and post request
+var preUserId = client.global.get("pre_user_id");
+var preIterationId = client.global.get("pre_iteration_id");
+
+client.check("User ID Consistency", function() {
+    return context.userId === preUserId;
+}, "User ID should be consistent between pre and post request scripts");
+
+client.check("Iteration ID Consistency", function() {
+    return context.iterationId === preIterationId;
+}, "Iteration ID should be consistent between pre and post request scripts");
+
+// Store values for verification
+client.global.set("final_user_id", context.userId);
+client.global.set("final_iteration_id", context.iterationId);
+%}
+
+###

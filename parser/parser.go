@@ -47,12 +47,24 @@ func parseRequest(reqStr string) http.Request {
 		return request
 	}
 
-	// Skip any comment lines and extract name if present
+	// Skip any comment lines and extract name and lifecycle annotations if present
 	lineIndex := 0
 	for lineIndex < len(lines) {
 		line := strings.TrimSpace(lines[lineIndex])
 		if strings.HasPrefix(line, "# @name ") {
 			request.Name = strings.TrimSpace(strings.TrimPrefix(line, "# @name "))
+			lineIndex++
+		} else if strings.HasPrefix(line, "# @BeforeUser") {
+			request.Lifecycle = http.LifecycleBeforeUser
+			lineIndex++
+		} else if strings.HasPrefix(line, "# @BeforeIteration") {
+			request.Lifecycle = http.LifecycleBeforeIteration
+			lineIndex++
+		} else if strings.HasPrefix(line, "# @TeardownUser") {
+			request.Lifecycle = http.LifecycleTeardownUser
+			lineIndex++
+		} else if strings.HasPrefix(line, "# @TeardownIteration") {
+			request.Lifecycle = http.LifecycleTeardownIteration
 			lineIndex++
 		} else if strings.HasPrefix(line, "#") {
 			// Skip regular comment lines

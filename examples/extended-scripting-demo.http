@@ -1,0 +1,124 @@
+###
+# @name Setup User
+# @BeforeUser
+# Setup script that runs once per virtual user
+
+> {%
+    console.log("Setting up user environment...");
+    client.global.set("userSetup", true);
+    client.global.set("baseUrl", "https://jsonplaceholder.typicode.com");
+    client.global.set("userId", Math.floor(Math.random() * 10) + 1);
+%}
+
+###
+# @name Setup Iteration
+# @BeforeIteration
+# Setup script that runs before each iteration
+
+> {%
+    console.log("Setting up iteration...");
+    client.global.set("iterationStart", Date.now());
+    var currentUserId = client.global.get("userId");
+    console.log("Using userId: " + currentUserId);
+%}
+
+###
+# @name Create Post
+# This request creates a new post and will be available as create_post() function
+
+POST {{.baseUrl}}/posts
+Content-Type: application/json
+
+{
+  "title": "Test Post {{.iterationStart}}",
+  "body": "This is a test post created at {{.iterationStart}}",
+  "userId": {{.userId}}
+}
+
+> {%
+    // Post-request script: Extract post ID from response
+    var jsonData = response.body;
+    console.log("Created post with ID: " + jsonData.id);
+    client.global.set("createdPostId", jsonData.id);
+    
+    // Validate the response
+    client.check("Post Creation Success", function() {
+        return jsonData.id && jsonData.id > 0;
+    }, "Post should be created with a valid ID");
+    
+    client.check("Correct User ID", function() {
+        return jsonData.userId == client.global.get("userId");
+    }, "Post should have the correct userId");
+%}
+
+###
+# @name Get Post
+# This request retrieves the created post and will be available as get_post() function
+
+GET {{.baseUrl}}/posts/{{.createdPostId}}
+Accept: application/json
+
+> {%
+    // Post-request script: Process the response
+    var jsonData = response.body;
+    console.log("Retrieved Post Title: " + jsonData.title);
+    
+    client.check("Post Retrieval", function() {
+        return jsonData.title && jsonData.title.includes("Test Post");
+    }, "Should retrieve the created post successfully");
+%}
+
+###
+# @name Test Function Call
+# This request demonstrates calling generated functions
+
+> {%
+    console.log("Testing generated function calls...");
+    
+    // Call the create_post() function
+    var createResponse = client.create_post();
+    if (createResponse.success) {
+        console.log("Function call successful!");
+        console.log("Created post via function call");
+    } else {
+        console.log("Function call failed: " + createResponse.error);
+    }
+    
+    // Call the get_post() function
+    var getResponse = client.get_post();
+    if (getResponse.success) {
+        console.log("Get function call successful!");
+    } else {
+        console.log("Get function call failed: " + getResponse.error);
+    }
+%}
+
+###
+# @name Iteration Cleanup
+# @TeardownIteration
+# Cleanup script that runs after each iteration
+
+> {%
+    var startTime = client.global.get("iterationStart");
+    var endTime = Date.now();
+    var duration = endTime - startTime;
+    console.log("Iteration completed in " + duration + "ms");
+    
+    // Clean up iteration-specific data
+    client.global.set("createdPostId", null);
+%}
+
+###
+# @name User Cleanup  
+# @TeardownUser
+# Cleanup script that runs once after all iterations for a virtual user
+
+> {%
+    console.log("Cleaning up user environment...");
+    console.log("User completed all iterations successfully");
+    
+    // Record user ccompletion metrics
+    client.check("User Completion", function() {
+        return client.global.get("userSetup") === true;
+    }, "User should have been properly set up");
+%}
