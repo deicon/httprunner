@@ -56,6 +56,10 @@ type Report struct {
 	SuccessfulChecks         int
 	FailedChecks             int
 	MetricsSummaries         map[string]metrics.MetricSummary
+	TotalVirtualUsers        int
+	RuntimeSeconds           float64
+	PerVUMetrics             map[string]float64
+	PerIterationMetrics      map[string]float64
 }
 
 // IterationReport contains results for a single iteration

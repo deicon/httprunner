@@ -22,6 +22,9 @@ func (f *JSONFormatter) Format(report *types.Report) (string, error) {
 			"successfulChecks":    report.SuccessfulChecks,
 			"failedChecks":        report.FailedChecks,
 			"checkSuccessRate":    0.0,
+			"totalVirtualUsers":   report.TotalVirtualUsers,
+			"runtimeSeconds":      report.RuntimeSeconds,
+			"requestsPerSecond":   0.0,
 			"averageResponseTime": report.AverageResponseTime.String(),
 			"minResponseTime":     report.MinResponseTime.String(),
 			"maxResponseTime":     report.MaxResponseTime.String(),
@@ -33,11 +36,17 @@ func (f *JSONFormatter) Format(report *types.Report) (string, error) {
 		"errorBreakdown":           report.ErrorBreakdown,
 		"checkSummaries":           report.CheckSummaries,
 		"metricsSummaries":         report.MetricsSummaries,
+		"perVUMetrics":             report.PerVUMetrics,
+		"perIterationMetrics":      report.PerIterationMetrics,
 		"requestDetails":           report.RequestDetails,
 	}
 
 	if report.TotalRequests > 0 {
 		output["summary"].(map[string]interface{})["successRate"] = float64(report.SuccessfulRequests) / float64(report.TotalRequests) * 100
+	}
+
+	if report.RuntimeSeconds > 0 {
+		output["summary"].(map[string]interface{})["requestsPerSecond"] = float64(report.TotalRequests) / report.RuntimeSeconds
 	}
 
 	if report.TotalChecks > 0 {

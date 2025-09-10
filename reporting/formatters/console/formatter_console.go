@@ -19,7 +19,13 @@ func (f *ConsoleFormatter) Format(report *types.Report) (string, error) {
 	buf.WriteString("===================\n\n")
 
 	// Summary statistics
-	buf.WriteString(fmt.Sprintf("Total Requests: %d\n", report.TotalRequests))
+	buf.WriteString(fmt.Sprintf("Total Requests: %d", report.TotalRequests))
+	if report.RuntimeSeconds > 0 {
+		reqPerSec := float64(report.TotalRequests) / report.RuntimeSeconds
+		buf.WriteString(fmt.Sprintf(" (%.1f req/s)", reqPerSec))
+	}
+	buf.WriteString("\n")
+
 	buf.WriteString(fmt.Sprintf("Successful Requests: %d\n", report.SuccessfulRequests))
 	buf.WriteString(fmt.Sprintf("Failed Requests: %d\n", report.FailedRequests))
 
@@ -28,6 +34,8 @@ func (f *ConsoleFormatter) Format(report *types.Report) (string, error) {
 		buf.WriteString(fmt.Sprintf("Success Rate: %.1f%%\n", successRate))
 	}
 
+	buf.WriteString(fmt.Sprintf("Virtual Users: %d\n", report.TotalVirtualUsers))
+	buf.WriteString(fmt.Sprintf("Runtime: %.1fs\n", report.RuntimeSeconds))
 	buf.WriteString(fmt.Sprintf("Average Response Time: %v\n", report.AverageResponseTime))
 	buf.WriteString(fmt.Sprintf("Minimum Response Time: %v\n", report.MinResponseTime))
 	buf.WriteString(fmt.Sprintf("Maximum Response Time: %v\n", report.MaxResponseTime))
@@ -103,11 +111,15 @@ func (f *ConsoleFormatter) Format(report *types.Report) (string, error) {
 			}
 		}
 
-		// Display counters
+		// Display counters with rates
 		if len(counters) > 0 {
 			buf.WriteString("Counters:\n")
 			for name, summary := range counters {
-				buf.WriteString(fmt.Sprintf("  %-25s %10.0f  (count: %d)\n", name, summary.Sum, summary.Count))
+				rateInfo := ""
+				if summary.Rate > 0 && summary.RateUnit != "" {
+					rateInfo = fmt.Sprintf("  (%.1f %s)", summary.Rate, summary.RateUnit)
+				}
+				buf.WriteString(fmt.Sprintf("  %-25s %10.0f  (count: %d)%s\n", name, summary.Sum, summary.Count, rateInfo))
 			}
 			buf.WriteString("\n")
 		}
@@ -144,6 +156,28 @@ func (f *ConsoleFormatter) Format(report *types.Report) (string, error) {
 			}
 			buf.WriteString("\n")
 		}
+	}
+
+	// Per-VU metrics
+	if len(report.PerVUMetrics) > 0 {
+		buf.WriteString("Per Virtual User Metrics:\n")
+		buf.WriteString("========================\n")
+		for name, value := range report.PerVUMetrics {
+			displayName := strings.Replace(name, "_per_vu", "", 1)
+			buf.WriteString(fmt.Sprintf("  %-25s %.2f\n", displayName, value))
+		}
+		buf.WriteString("\n")
+	}
+
+	// Per-iteration metrics
+	if len(report.PerIterationMetrics) > 0 {
+		buf.WriteString("Per Iteration Metrics:\n")
+		buf.WriteString("=====================\n")
+		for name, value := range report.PerIterationMetrics {
+			displayName := strings.Replace(name, "_per_iter", "", 1)
+			buf.WriteString(fmt.Sprintf("  %-25s %.2f\n", displayName, value))
+		}
+		buf.WriteString("\n")
 	}
 
 	// Request details (limited to first 10 for console)

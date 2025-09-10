@@ -2,9 +2,12 @@ package runner
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	nethttp "net/http"
+	"net/http/httptrace"
 	"sync"
 	"time"
 
@@ -90,6 +93,10 @@ func (r *Runner) Run() (*types.Report, error) {
 
 	// Add metrics summaries to the report
 	report.MetricsSummaries = r.MetricsCollector.GetSummaries()
+	report.TotalVirtualUsers = r.Concurrency
+	report.RuntimeSeconds = r.MetricsCollector.GetRuntimeSeconds()
+	report.PerVUMetrics = r.MetricsCollector.GetPerVUMetrics(r.Concurrency)
+	report.PerIterationMetrics = r.MetricsCollector.GetPerIterationMetrics()
 
 	return report, nil
 }
@@ -173,6 +180,9 @@ func (r *Runner) executeWithStreaming() error {
 		}
 	}
 
+	// Mark end time for rate calculations
+	r.MetricsCollector.SetEndTime()
+
 	// Close streaming collector
 	if err := r.StreamingCollector.Close(); err != nil {
 		return fmt.Errorf("failed to close streaming collector: %v", err)
@@ -248,21 +258,95 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 		request.Header.Set(key, value)
 	}
 
-	// Timing metrics for HTTP request phases
-	var blocked, connecting, sending, waiting, receiving, tlsHandshaking time.Duration
+	// Initialize trace metrics
+	var (
+		startTime    = time.Now()
+		dnsStart     time.Time
+		dnsEnd       time.Time
+		connectStart time.Time
+		connectEnd   time.Time
+		tlsStart     time.Time
+		tlsEnd       time.Time
+		gotFirstByte time.Time
+		wroteRequest time.Time
+		gotResponse  time.Time
+	)
 
-	start := time.Now()
+	// Create HTTP trace to capture real timing metrics
+	trace := &httptrace.ClientTrace{
+		DNSStart: func(_ httptrace.DNSStartInfo) {
+			dnsStart = time.Now()
+		},
+		DNSDone: func(_ httptrace.DNSDoneInfo) {
+			dnsEnd = time.Now()
+		},
+		ConnectStart: func(_, _ string) {
+			connectStart = time.Now()
+		},
+		ConnectDone: func(_, _ string, _ error) {
+			connectEnd = time.Now()
+		},
+		TLSHandshakeStart: func() {
+			tlsStart = time.Now()
+		},
+		TLSHandshakeDone: func(_ tls.ConnectionState, _ error) {
+			tlsEnd = time.Now()
+		},
+		WroteRequest: func(_ httptrace.WroteRequestInfo) {
+			wroteRequest = time.Now()
+		},
+		GotFirstResponseByte: func() {
+			gotFirstByte = time.Now()
+		},
+	}
+
+	// Create context with trace
+	ctx := httptrace.WithClientTrace(context.Background(), trace)
+	request = request.WithContext(ctx)
+
+	// Execute HTTP request
 	resp, err := client.Do(request)
-	duration := time.Since(start)
-	result.ResponseTime = duration
+	gotResponse = time.Now()
 
-	// For simplicity, we'll estimate phases (in a real implementation, these would use custom transport)
-	blocked = time.Duration(0)        // Time blocked waiting for connection
-	connecting = duration / 10        // Estimated connection time
-	sending = duration / 20           // Estimated sending time
-	waiting = duration / 2            // Estimated waiting time (TTFB)
-	receiving = duration / 4          // Estimated receiving time
-	tlsHandshaking = time.Duration(0) // TLS handshake time
+	// Calculate timing metrics
+	duration := gotResponse.Sub(startTime)
+	blocked := time.Duration(0)
+	connecting := time.Duration(0)
+	sending := time.Duration(0)
+	waiting := time.Duration(0)
+	receiving := time.Duration(0)
+	tlsHandshaking := time.Duration(0)
+
+	if !dnsStart.IsZero() {
+		blocked = dnsStart.Sub(startTime)
+	}
+	if !connectStart.IsZero() && !connectEnd.IsZero() {
+		connecting = connectEnd.Sub(connectStart)
+	}
+	if !tlsStart.IsZero() && !tlsEnd.IsZero() {
+		tlsHandshaking = tlsEnd.Sub(tlsStart)
+	}
+	if !wroteRequest.IsZero() {
+		if !connectEnd.IsZero() {
+			sending = wroteRequest.Sub(connectEnd)
+		} else if !dnsEnd.IsZero() {
+			sending = wroteRequest.Sub(dnsEnd)
+		} else {
+			sending = wroteRequest.Sub(startTime)
+		}
+	}
+	if !gotFirstByte.IsZero() && !wroteRequest.IsZero() {
+		waiting = gotFirstByte.Sub(wroteRequest)
+	}
+	if !gotFirstByte.IsZero() {
+		receiving = gotResponse.Sub(gotFirstByte)
+	} else {
+		// If we didn't get first byte timing, use total duration minus other phases
+		receiving = duration - blocked - connecting - sending - tlsHandshaking
+		if receiving < 0 {
+			receiving = duration
+		}
+	}
 
 	if err != nil {
 		result.Success = false
