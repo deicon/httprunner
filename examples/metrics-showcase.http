@@ -82,15 +82,15 @@ Accept: application/json
 
 > {%
 // Monitor error rates and patterns
-var failedMetrics = client.metrics.get("http_req_failed");
-var totalReqs = client.metrics.getCurrent("http_reqs");
+var failedMetricsOverall = client.metrics.get("http_req_failed");
+var totalReqs = client.metrics.get("http_reqs");
 
-if (failedMetrics) {
-    var failureRate = (failedMetrics.sum / totalReqs) * 100;
-    console.log("Current failure rate: " + failureRate.toFixed(2) + "%");
-    
+if (failedMetricsOverall) {
+    var failureRateOverall = (failedMetricsOverall.sum / totalReqs.sum) * 100;
+    console.log("Overall failure rate: " + failureRateOverall.toFixed(2) + "%");
+
     client.check("Error Rate Threshold", function() {
-        return failureRate < 25; // Less than 25% failure rate acceptable for this test
+        return failureRateOverall < 25; // Less than 25% failure rate acceptable for this test
     }, "Error rate should be within acceptable limits");
 } else {
     console.log("No failures recorded yet");

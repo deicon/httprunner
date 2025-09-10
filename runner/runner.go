@@ -142,7 +142,7 @@ func (r *Runner) executeWithStreaming() error {
 					resultChan <- result
 					if !result.Success {
 						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, result.Error, j+1)
-						return
+						break
 					}
 					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
 				}

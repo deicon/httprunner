@@ -1122,7 +1122,7 @@ func (f *HierarchicalFormatter) formatHierarchicalHTML(report *HierarchicalRepor
 
     {{if or (eq .DetailLevel "virtualuser") (eq .DetailLevel "iteration") (eq .DetailLevel "full")}}
     <button class="collapsible" onclick="toggleCollapsible(this)">
-        🔧 Goroutine Breakdown ({{len .VirtualUserReports}} goroutines)
+        🔧 VirtualUser Breakdown ({{len .VirtualUserReports}} goroutines)
     </button>
     <div class="content">
         {{range $goroutineIndex, $goroutine := .VirtualUserReports}}

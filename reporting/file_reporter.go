@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/deicon/httprunner/metrics"
@@ -437,8 +438,16 @@ func (fr *FileReporter) buildGoroutineReportFromDataWithResults(goroutineID int,
 
 	var totalResponseTime time.Duration
 
+	// Sort iterations by ID to ensure consistent order
+	iterationIDs := make([]int, 0, len(goroutineData.iterations))
+	for id := range goroutineData.iterations {
+		iterationIDs = append(iterationIDs, id)
+	}
+	sort.Ints(iterationIDs)
+
 	// Process each iteration
-	for _, iteration := range goroutineData.iterations {
+	for _, iterationID := range iterationIDs {
+		iteration := goroutineData.iterations[iterationID]
 		// Find request results for this specific goroutine and iteration
 		var iterationRequestResults []RequestResult
 		for _, result := range allRequestResults {
