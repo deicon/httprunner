@@ -176,14 +176,17 @@ func (m *Metric) GetPercentile(percentile float64) float64 {
 
 // MetricsCollector manages all metrics for a test run
 type MetricsCollector struct {
-	metrics map[string]*Metric
-	mu      sync.RWMutex
+	metrics   map[string]*Metric
+	startTime time.Time
+	endTime   time.Time
+	mu        sync.RWMutex
 }
 
 // NewMetricsCollector creates a new metrics collector with standard metrics
 func NewMetricsCollector() *MetricsCollector {
 	collector := &MetricsCollector{
-		metrics: make(map[string]*Metric),
+		metrics:   make(map[string]*Metric),
+		startTime: time.Now(),
 	}
 
 	// Initialize standard built-in metrics
@@ -307,6 +310,8 @@ type MetricSummary struct {
 	P95         float64    `json:"p95,omitempty"`
 	P99         float64    `json:"p99,omitempty"`
 	LatestValue float64    `json:"latest_value,omitempty"`
+	Rate        float64    `json:"rate,omitempty"`      // Rate per second
+	RateUnit    string     `json:"rate_unit,omitempty"` // Unit for the rate (req/s, bytes/s, etc.)
 }
 
 // GetSummary returns a summary of the metric
@@ -328,6 +333,7 @@ func (m *Metric) GetSummary() MetricSummary {
 			summary.Sum = m.GetSum()
 		case Gauge:
 			summary.LatestValue = latest.Value
+			summary.Average = latest.Value
 		case Rate:
 			summary.Sum = m.GetSum()
 			summary.Average = m.GetAverage()
@@ -346,14 +352,138 @@ func (m *Metric) GetSummary() MetricSummary {
 	return summary
 }
 
-// GetSummaries returns summaries for all metrics
+// SetEndTime marks the end of the test run for rate calculations
+func (mc *MetricsCollector) SetEndTime() {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	mc.endTime = time.Now()
+}
+
+// GetRuntimeSeconds returns the total runtime in seconds
+func (mc *MetricsCollector) GetRuntimeSeconds() float64 {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	endTime := mc.endTime
+	if endTime.IsZero() {
+		endTime = time.Now()
+	}
+	return endTime.Sub(mc.startTime).Seconds()
+}
+
+// GetSummary returns a summary of the metric with rate calculations
+func (m *Metric) GetSummaryWithRate(runtimeSeconds float64) MetricSummary {
+	summary := MetricSummary{
+		Name:  m.Name,
+		Type:  m.Type,
+		Count: m.GetCount(),
+	}
+
+	if summary.Count > 0 {
+		latest := m.GetLatest()
+		if latest != nil {
+			summary.LatestValue = latest.Value
+		}
+
+		switch m.Type {
+		case Counter:
+			summary.Sum = m.GetSum()
+			if runtimeSeconds > 0 {
+				summary.Rate = summary.Sum / runtimeSeconds
+				switch m.Name {
+				case "http_reqs", "iterations":
+					summary.RateUnit = "req/s"
+				case "data_sent", "data_received":
+					summary.RateUnit = "bytes/s"
+				default:
+					summary.RateUnit = "/s"
+				}
+			}
+		case Gauge:
+			summary.LatestValue = latest.Value
+			summary.Average = latest.Value
+		case Rate:
+			summary.Sum = m.GetSum()
+			summary.Average = m.GetAverage()
+		case Trend:
+			summary.Sum = m.GetSum()
+			summary.Average = m.GetAverage()
+			summary.Min = m.GetMin()
+			summary.Max = m.GetMax()
+			summary.P50 = m.GetPercentile(50)
+			summary.P90 = m.GetPercentile(90)
+			summary.P95 = m.GetPercentile(95)
+			summary.P99 = m.GetPercentile(99)
+		}
+	}
+
+	return summary
+}
+
+// GetSummaries returns summaries for all metrics with rate calculations
 func (mc *MetricsCollector) GetSummaries() map[string]MetricSummary {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
+	runtimeSeconds := mc.GetRuntimeSecondsUnsafe()
 	summaries := make(map[string]MetricSummary)
 	for name, metric := range mc.metrics {
-		summaries[name] = metric.GetSummary()
+		summaries[name] = metric.GetSummaryWithRate(runtimeSeconds)
 	}
 	return summaries
+}
+
+// GetRuntimeSecondsUnsafe returns runtime without locking (for internal use)
+func (mc *MetricsCollector) GetRuntimeSecondsUnsafe() float64 {
+	endTime := mc.endTime
+	if endTime.IsZero() {
+		endTime = time.Now()
+	}
+	return endTime.Sub(mc.startTime).Seconds()
+}
+
+// GetPerVUMetrics calculates metrics per virtual user
+func (mc *MetricsCollector) GetPerVUMetrics(totalVUs int) map[string]float64 {
+	if totalVUs == 0 {
+		return make(map[string]float64)
+	}
+
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	perVUMetrics := make(map[string]float64)
+	for name, metric := range mc.metrics {
+		if metric.Type == Counter {
+			sum := metric.GetSum()
+			perVUMetrics[name+"_per_vu"] = sum / float64(totalVUs)
+		}
+	}
+	return perVUMetrics
+}
+
+// GetPerIterationMetrics calculates metrics per iteration
+func (mc *MetricsCollector) GetPerIterationMetrics() map[string]float64 {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	perIterMetrics := make(map[string]float64)
+
+	// Get total iterations
+	iterationsMetric := mc.metrics["iterations"]
+	if iterationsMetric == nil {
+		return perIterMetrics
+	}
+
+	totalIterations := iterationsMetric.GetSum()
+	if totalIterations == 0 {
+		return perIterMetrics
+	}
+
+	for name, metric := range mc.metrics {
+		if metric.Type == Counter && name != "iterations" {
+			sum := metric.GetSum()
+			perIterMetrics[name+"_per_iter"] = sum / totalIterations
+		}
+	}
+	return perIterMetrics
 }
