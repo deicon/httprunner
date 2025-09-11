@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # Sample REST API server
+  testapi:
+    build: 
+      context: ./testapi
+      dockerfile: Dockerfile
+    container_name: testapi
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - test-network
+
+  # Toxiproxy for network simulation
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.5.0
+    container_name: toxiproxy
+    ports:
+      - "8474:8474"  # API port
+      - "8081:8081"  # Proxy port for testapi
+    depends_on:
+      testapi:
+        condition: service_healthy
+    volumes:
+      - ./toxiproxy-config.json:/config.json
+    command: -config=/config.json
+    networks:
+      - test-network
+
+  # HTTP Runner for testing
+  httprunner:
+    profiles:
+      - runner
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: httprunner
+    depends_on:
+      testapi:
+        condition: service_healthy
+      toxiproxy:
+        condition: service_started
+    volumes:
+      - ./tests:/requests
+      - ./results:/reports
+    environment:
+      - BASEURL=http://testapi:8080
+      - TOXIPROXY_URL=http://toxiproxy:8081
+      - API_VERSION=v1
+    working_dir: /httprunner
+    command: >
+      sh -c "
+        echo 'Starting comprehensive test suite...' &&
+        ./httprunner -u 5 -i 10 -d 500 -f /requests/comprehensive-test.http -output /reports -detail summary -report html &&
+        echo 'Test completed. Results saved in reports/'
+      "
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

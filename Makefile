@@ -1,5 +1,4 @@
 # Variables
-BINARY_NAME=httprunner
 BUILD_DIR=build
 VERSION=$(shell git describe --tags --always --dirty)
 LDFLAGS=-ldflags "-X main.version=${VERSION}"
@@ -27,32 +26,32 @@ test-coverage:
 # Build for current platform
 .PHONY: build
 build:
-	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/httprunner
-	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/harparser
+	go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner ./cmd/httprunner
+	go build $(LDFLAGS) -o $(BUILD_DIR)/harparserr ./cmd/harparser
 
 # Build for all platforms
 .PHONY: build-all
 build-all: clean
 	# Linux
-	GOOS=linux GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-386 ./cmd/httprunner
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/httprunner
-	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/httprunner
-	GOOS=linux GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-linux-386 ./cmd/harparser
+	GOOS=linux GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner-linux-386 ./cmd/httprunner
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner-linux-amd64 ./cmd/httprunner
+	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIRharparserux-arm64 ./cmd/httprunner
+	GOOS=linux GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/haharparser386 ./cmd/harparser
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-linux-amd64 ./cmd/harparser
 	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-linux-arm64 ./cmd/harparser
 	
 	# Windows
-	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-386.exe ./cmd/httprunner
-	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/httprunner
-	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-arm64.exe ./cmd/httprunner
-	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-386.exe ./cmd/harparser
+	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner-windows-386.exe ./cmd/httprunner
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIRharparserindows-amd64.exe ./cmd/httprunner
+	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIRharparserdows-arm64.exe ./cmd/httprunner
+	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIharparsers-386.exe ./cmd/harparser
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-amd64.exe ./cmd/harparser
 	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-arm64.exe ./cmd/harparser
 	
 	# macOS
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/httprunner
-	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/httprunner
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-darwin-amd64 ./cmd/harparser
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner-darwin-amd64 ./cmd/httprunner
+	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIRharparserwin-arm64 ./cmd/httprunner
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIharparserin-amd64 ./cmd/harparser
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-darwin-arm64 ./cmd/harparser
 
 # Install dependencies
@@ -79,8 +78,8 @@ check: fmt lint test
 # Development build (fast)
 .PHONY: dev
 dev:
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/httprunner
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/harparser
+	go build -o $(BUILD_DIR)/httprunner ./cmd/httprunner
+	go build -o $(BUILD_DIR)/harparser ./cmd/harparser
 
 # Help
 .PHONY: help

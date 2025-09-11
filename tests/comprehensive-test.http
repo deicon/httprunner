@@ -1,0 +1,356 @@
+### 
+# @name Health Check
+> {%
+// Pre-request: Initialize test session
+client.global.set("testSessionId", "session_" + Math.random().toString(36).substring(7))
+client.global.set("startTime", Date.now())
+console.log("=== Starting Comprehensive HTTP Runner Test Suite ===")
+console.log("Session ID: " + client.global.get("testSessionId"))
+%}
+
+GET {{.BASEURL}}/health
+Accept: application/json
+
+> {%
+// Validate health check response
+client.check("Health Check Status", function() {
+    return response.body && response.body.status === "success";
+}, "Health endpoint should return success status");
+
+client.check("Health Check Response Time", function() {
+    var duration = client.metrics.getCurrent("http_req_duration");
+    return duration < 1000; // Under 1 second
+}, "Health check should respond quickly");
+
+console.log("✓ Health check completed")
+%}
+
+### 
+# @name Create Test User
+> {%
+// Pre-request: Generate test user data
+var timestamp = Date.now()
+var username = "testuser_" + timestamp
+var email = username + "@example.com"
+
+client.global.set("testUsername", username)
+client.global.set("testEmail", email)
+
+console.log("Creating user: " + username)
+%}
+
+POST {{.BASEURL}}/api/users
+Content-Type: application/json
+
+{
+  "username": "{{.testUsername}}",
+  "email": "{{.testEmail}}"
+}
+
+> {%
+// Validate user creation
+client.check("User Creation Status", function() {
+    return response.body && response.body.status === "success";
+}, "User creation should succeed");
+
+client.check("User Data Present", function() {
+    return response.body.data && response.body.data.user;
+}, "Response should contain user data");
+
+client.check("User ID Generated", function() {
+    return response.body.data.user.id && response.body.data.user.id > 0;
+}, "User should have a valid ID");
+
+if (response.body.data && response.body.data.user) {
+    var userId = response.body.data.user.id
+    client.global.set("testUserId", userId)
+    console.log("✓ Created user with ID: " + userId)
+}
+%}
+
+### 
+# @name Get User Details
+GET {{.BASEURL}}/api/users/{{.testUserId}}
+Accept: application/json
+
+> {%
+// Validate user retrieval
+client.check("User Retrieval Success", function() {
+    return response.body && response.body.status === "success";
+}, "Should successfully retrieve user");
+
+client.check("User Data Consistency", function() {
+    return response.body.data && 
+           response.body.data.username === client.global.get("testUsername") &&
+           response.body.data.email === client.global.get("testEmail");
+}, "Retrieved user data should match created user");
+
+console.log("✓ User retrieval validated")
+%}
+
+### 
+# @name Update User
+PUT {{.BASEURL}}/api/users/{{.testUserId}}
+Content-Type: application/json
+
+{
+  "username": "{{.testUsername}}_updated",
+  "email": "updated_{{.testEmail}}"
+}
+
+> {%
+// Validate user update
+client.check("User Update Success", function() {
+    return response.body && response.body.status === "success";
+}, "User update should succeed");
+
+client.check("Updated Data Reflected", function() {
+    return response.body.data && 
+           response.body.data.username.includes("_updated");
+}, "Updated username should be reflected");
+
+console.log("✓ User update completed")
+%}
+
+### 
+# @name Get All Users
+GET {{.BASEURL}}/api/users
+Accept: application/json
+
+> {%
+// Validate users list
+client.check("Users List Retrieved", function() {
+    return response.body && response.body.status === "success";
+}, "Should successfully retrieve users list");
+
+client.check("Users Array Present", function() {
+    return response.body.data && response.body.data.users && Array.isArray(response.body.data.users);
+}, "Response should contain users array");
+
+client.check("Test User In List", function() {
+    if (!response.body.data || !response.body.data.users) return false;
+    return response.body.data.users.some(function(user) {
+        return user.id == client.global.get("testUserId");
+    });
+}, "Created user should appear in users list");
+
+console.log("✓ Users list validation completed")
+%}
+
+### 
+# @name Get Products
+GET {{.BASEURL}}/api/products
+Accept: application/json
+
+> {%
+// Validate products
+client.check("Products Retrieved", function() {
+    return response.body && response.body.status === "success";
+}, "Should retrieve products successfully");
+
+client.check("Products Data Structure", function() {
+    return response.body.data && response.body.data.products && Array.isArray(response.body.data.products);
+}, "Should have products array");
+
+client.check("Sample Products Present", function() {
+    if (!response.body.data || !response.body.data.products) return false;
+    return response.body.data.products.length >= 3; // Should have our seeded products
+}, "Should have seeded sample products");
+
+if (response.body.data && response.body.data.products && response.body.data.products.length > 0) {
+    client.global.set("sampleProductId", response.body.data.products[0].id)
+}
+
+console.log("✓ Products validation completed")
+%}
+
+### 
+# @name Get Specific Product
+GET {{.BASEURL}}/api/products/{{.sampleProductId}}
+Accept: application/json
+
+> {%
+// Validate specific product retrieval
+client.check("Product Retrieved", function() {
+    return response.body && response.body.status === "success";
+}, "Should retrieve specific product");
+
+client.check("Product Has Required Fields", function() {
+    return response.body.data && 
+           response.body.data.id && 
+           response.body.data.name && 
+           response.body.data.price !== undefined;
+}, "Product should have required fields");
+
+console.log("✓ Specific product retrieval validated")
+%}
+
+### 
+# @name Create New Product
+POST {{.BASEURL}}/api/products
+Content-Type: application/json
+
+{
+  "name": "Test Product",
+  "description": "A product created during testing",
+  "price": 49.99,
+  "stock": 25
+}
+
+> {%
+// Validate product creation
+client.check("Product Creation Success", function() {
+    return response.body && response.body.status === "success";
+}, "Product creation should succeed");
+
+client.check("Product ID Assigned", function() {
+    return response.body.data && response.body.data.product && response.body.data.product.id;
+}, "Created product should have ID");
+
+if (response.body.data && response.body.data.product) {
+    client.global.set("createdProductId", response.body.data.product.id)
+    console.log("✓ Created product with ID: " + response.body.data.product.id)
+}
+%}
+
+### 
+# @name Echo Test
+POST {{.BASEURL}}/api/echo
+Content-Type: application/json
+
+{
+  "message": "Hello from HTTP Runner",
+  "timestamp": "{{.startTime}}",
+  "sessionId": "{{.testSessionId}}"
+}
+
+> {%
+// Validate echo functionality
+client.check("Echo Response Success", function() {
+    return response.body && response.body.status === "success";
+}, "Echo should respond successfully");
+
+client.check("Echo Data Returned", function() {
+    return response.body.data && 
+           response.body.data.message === "Hello from HTTP Runner" &&
+           response.body.data.sessionId === client.global.get("testSessionId");
+}, "Echo should return the sent data");
+
+console.log("✓ Echo test validated")
+%}
+
+### 
+# @name Slow Endpoint Test
+> {%
+console.log("Testing slow endpoint (may take 1-3 seconds)...")
+var slowStartTime = Date.now()
+%}
+
+GET {{.BASEURL}}/api/slow
+Accept: application/json
+
+> {%
+// Validate slow endpoint
+var slowEndTime = Date.now()
+var slowDuration = slowEndTime - slowStartTime
+
+client.check("Slow Endpoint Response", function() {
+    return response.body && response.body.status === "success";
+}, "Slow endpoint should eventually respond");
+
+client.check("Slow Endpoint Timing", function() {
+    return slowDuration >= 1000; // Should take at least 1 second
+}, "Slow endpoint should actually be slow");
+
+console.log("✓ Slow endpoint test completed (took " + slowDuration + "ms)")
+%}
+
+### 
+# @name Random Error Test
+> {%
+console.log("Testing random error endpoint (30% failure rate)...")
+%}
+
+GET {{.BASEURL}}/api/random-error
+Accept: application/json
+
+> {%
+// This endpoint randomly fails - we just check it responds
+client.check("Random Error Endpoint Responds", function() {
+    return response.body && (response.body.status === "success" || response.body.status === "error");
+}, "Random error endpoint should respond with either success or error");
+
+console.log("✓ Random error endpoint test completed (status: " + (response.body ? response.body.status : "unknown") + ")")
+%}
+
+### 
+# @name Performance Metrics Analysis
+> {%
+// Analyze overall test performance
+console.log("=== Test Performance Analysis ===")
+
+var allMetrics = client.metrics.getAll()
+Object.keys(allMetrics).forEach(function(name) {
+    var metric = allMetrics[name]
+    console.log(name + " (" + metric.type + "):")
+    
+    if (metric.type === "counter") {
+        console.log("  Total: " + metric.count)
+    } else if (metric.type === "histogram") {
+        console.log("  Count: " + metric.count)
+        console.log("  Average: " + metric.average.toFixed(2) + "ms")
+        console.log("  Min: " + metric.min.toFixed(2) + "ms")
+        console.log("  Max: " + metric.max.toFixed(2) + "ms")
+        console.log("  P95: " + metric.p95.toFixed(2) + "ms")
+    } else if (metric.type === "rate") {
+        console.log("  Rate: " + (metric.average * 100).toFixed(2) + "%")
+    }
+    console.log("")
+})
+
+// Performance checks
+var durationStats = client.metrics.get("http_req_duration")
+if (durationStats) {
+    client.check("Average Response Time", function() {
+        return durationStats.average < 2000; // Under 2 seconds average
+    }, "Average response time should be reasonable")
+    
+    client.check("P95 Response Time", function() {
+        return durationStats.p95 < 5000; // P95 under 5 seconds
+    }, "95th percentile should be acceptable")
+}
+
+var failureRate = client.metrics.get("http_req_failed")
+if (failureRate) {
+    client.check("Overall Error Rate", function() {
+        return failureRate.average < 0.5; // Less than 50% errors
+    }, "Error rate should be manageable")
+}
+
+console.log("✓ Performance analysis completed")
+%}
+
+### 
+# @name Cleanup Test Data
+DELETE {{.BASEURL}}/api/users/{{.testUserId}}
+Accept: application/json
+
+> {%
+// Validate cleanup
+client.check("User Deletion Success", function() {
+    return response.body && response.body.status === "success";
+}, "Should successfully delete test user");
+
+console.log("✓ Test data cleanup completed")
+
+// Final test summary
+var endTime = Date.now()
+var totalDuration = endTime - client.global.get("startTime")
+console.log("=== Test Suite Summary ===")
+console.log("Session ID: " + client.global.get("testSessionId"))
+console.log("Total Duration: " + totalDuration + "ms")
+console.log("Tests completed successfully!")
+console.log("Check the reports/ directory for detailed results")
+%}
+
+###
