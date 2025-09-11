@@ -37,6 +37,7 @@ RUN chmod +x ./harparser
 
 # Create a directory for HTTP request files
 RUN mkdir -p /requests
+RUN mkdir -p /reports
 
 # Set the binary as the entrypoint
 ENTRYPOINT []

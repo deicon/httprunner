@@ -1,0 +1,92 @@
+### 
+# @name Test via Toxiproxy (Normal)
+> {%
+console.log("=== Testing via Toxiproxy ===")
+console.log("Testing normal connection through proxy...")
+%}
+
+GET {{.TOXIPROXY_URL}}/health
+Accept: application/json
+
+> {%
+client.check("Toxiproxy Health Check", function() {
+    return response.body && response.body.status === "success";
+}, "Should be able to reach API via Toxiproxy");
+
+var duration = client.metrics.getCurrent("http_req_duration");
+console.log("✓ Normal proxy response time: " + duration + "ms");
+%}
+
+### 
+# @name Add Network Latency
+> {%
+console.log("Adding 500ms latency to simulate slow network...")
+// In a real scenario, you would use Toxiproxy API to add toxics
+// POST to http://toxiproxy:8474/proxies/testapi_proxy/toxics
+// with latency toxic configuration
+%}
+
+POST http://toxiproxy:8474/proxies/testapi_proxy/toxics
+Content-Type: application/json
+
+{
+  "name": "latency_downstream",
+  "type": "latency",
+  "stream": "downstream",
+  "toxicity": 1.0,
+  "attributes": {
+    "latency": 500
+  }
+}
+
+> {%
+client.check("Latency Toxic Added", function() {
+    return response.body && response.body.name === "latency_downstream";
+}, "Should successfully add latency toxic");
+
+console.log("✓ Latency toxic added successfully");
+%}
+
+### 
+# @name Test with Latency
+GET {{.TOXIPROXY_URL}}/health
+Accept: application/json
+
+> {%
+var duration = client.metrics.getCurrent("http_req_duration");
+
+client.check("Latency Applied", function() {
+    return duration > 500; // Should be at least 500ms due to added latency
+}, "Request should be slower due to added latency");
+
+console.log("✓ Latency test response time: " + duration + "ms (should be ~500ms+ slower)");
+%}
+
+### 
+# @name Remove Latency Toxic
+DELETE http://toxiproxy:8474/proxies/testapi_proxy/toxics/latency_downstream
+
+> {%
+client.check("Latency Toxic Removed", function() {
+    return true; // 204 No Content is success
+}, "Should remove latency toxic");
+
+console.log("✓ Latency toxic removed");
+%}
+
+### 
+# @name Test Normal Speed Restored
+GET {{.TOXIPROXY_URL}}/health
+Accept: application/json
+
+> {%
+var duration = client.metrics.getCurrent("http_req_duration");
+
+client.check("Normal Speed Restored", function() {
+    return duration < 300; // Should be back to normal speed
+}, "Request should be fast again after removing latency");
+
+console.log("✓ Normal speed restored: " + duration + "ms");
+%}
+
+###

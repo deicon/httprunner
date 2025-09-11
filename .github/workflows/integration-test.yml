@@ -1,0 +1,51 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ develop, feat/* ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Cache Docker layers
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+          
+    - name: Run integration tests
+      run: |
+        chmod +x run-tests.sh
+        ./run-tests.sh
+        
+    - name: Upload test reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-reports
+        path: |
+          reports/test-results.html
+          reports/test-results.json
+          reports/test-results.csv
+        retention-days: 30
+        
+    - name: Upload test logs
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: test-logs
+        path: |
+          docker-compose.logs
+        retention-days: 7

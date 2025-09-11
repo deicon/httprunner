@@ -1,0 +1,20 @@
+### 
+# @name Script Only Test
+> {%
+// This is a script-only request for testing
+console.log("=== Script-Only Request Test ===")
+
+var allMetrics = client.metrics.getAll()
+Object.keys(allMetrics).forEach(function(name) {
+    var metric = allMetrics[name]
+    console.log(name + " (" + metric.type + "): count=" + metric.count)
+})
+
+client.check("Script Execution", function() {
+    return true; // Always pass
+}, "Script should execute successfully")
+
+console.log("✓ Script-only request completed")
+%}
+
+###
