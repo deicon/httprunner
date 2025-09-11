@@ -28,6 +28,7 @@ test-coverage:
 .PHONY: build
 build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/httprunner
+	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/harparser
 
 # Build for all platforms
 .PHONY: build-all
