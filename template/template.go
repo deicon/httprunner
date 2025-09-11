@@ -134,6 +134,9 @@ type Engine struct {
 	metricsCollector *metrics.MetricsCollector
 	requestFunctions map[string]chttp.Request
 	requestExecutor  RequestExecutor
+	// Persistent VM for maintaining JavaScript state between executions
+	vm   *goja.Runtime
+	vmMu sync.Mutex
 }
 
 // NewTemplateEngine creates a new template engine
@@ -175,8 +178,8 @@ func (te *Engine) RenderTemplate(templateStr string) (string, error) {
 	return buf.String(), nil
 }
 
-// ExecuteScript executes JavaScript code with access to global store and response
-func (te *Engine) ExecuteScript(script string, responseBody string, virtualUserID, iterationID int) error {
+// initializeVM initializes the JavaScript VM with client objects
+func (te *Engine) initializeVM(virtualUserID, iterationID int) *goja.Runtime {
 	vm := goja.New()
 
 	// Create client.global object
@@ -331,6 +334,21 @@ func (te *Engine) ExecuteScript(script string, responseBody string, virtualUserI
 		fmt.Println()
 	})
 	_ = vm.Set("console", consoleObj)
+
+	return vm
+}
+
+// ExecuteScript executes JavaScript code with access to global store and response
+func (te *Engine) ExecuteScript(script string, responseBody string, virtualUserID, iterationID int) error {
+	te.vmMu.Lock()
+	defer te.vmMu.Unlock()
+
+	// Initialize VM if not already done
+	if te.vm == nil {
+		te.vm = te.initializeVM(virtualUserID, iterationID)
+	}
+
+	vm := te.vm
 
 	// Parse response body as JSON if possible
 	var responseData interface{}

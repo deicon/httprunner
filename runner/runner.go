@@ -196,7 +196,7 @@ func (r *Runner) executeWithStreaming() error {
 			templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
 			templateEngine.SetMetricsCollector(r.MetricsCollector)
 
-			// Copy global state to worker template engine
+			// Copy global state to worker template ein inngine
 			globalStore := globalTemplateEngine.GetGlobalStore()
 			for k, v := range globalStore.GetAll() {
 				templateEngine.GetGlobalStore().Set(k, v)
@@ -345,6 +345,21 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 			result.Error = fmt.Sprintf("error executing pre-request script: %v", err)
 			return result
 		}
+	}
+
+	// Handle script-only requests (no HTTP verb/URL)
+	if req.Verb == "" && req.URL == "" {
+		// For script-only requests, just execute the post-request script and return
+		if req.Script != "" {
+			if err := te.ExecuteScript(req.Script, "", virtualUserId, iterationID); err != nil {
+				result.Success = false
+				result.Error = fmt.Sprintf("error executing script: %v", err)
+				return result
+			}
+		}
+		result.Success = true
+		result.StatusCode = 200 // Virtual success status for script-only requests
+		return result
 	}
 
 	// Render templates in URL

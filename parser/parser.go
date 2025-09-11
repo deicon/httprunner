@@ -124,13 +124,16 @@ func parseRequest(reqStr string) http.Request {
 		return request
 	}
 
-	// Parse verb and URL
-	parts := strings.SplitN(lines[lineIndex], " ", 2)
-	if len(parts) == 2 {
-		request.Verb = parts[0]
-		request.URL = parts[1]
+	// Parse verb and URL (only if not a script-only request)
+	line := strings.TrimSpace(lines[lineIndex])
+	if line != "> {%" && line != "" && !strings.HasPrefix(line, "#") {
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) == 2 {
+			request.Verb = parts[0]
+			request.URL = parts[1]
+		}
+		lineIndex++
 	}
-	lineIndex++
 
 	// Parse headers and body
 	inBody := false
