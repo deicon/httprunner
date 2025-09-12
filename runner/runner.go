@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	nethttp "net/http"
@@ -155,22 +156,8 @@ func (r *Runner) executeWithStreaming() error {
 	// Set up request executor for function calls
 	globalTemplateEngine.SetRequestExecutor(func(request chttp.Request) (*template.Response, error) {
 		// Execute the request and return a simplified response
-		result := r.execute(request, globalTemplateEngine, -1, -1) // Use -1 to indicate system execution
-		response := &template.Response{
-			StatusCode: result.StatusCode,
-			Headers:    make(map[string]string),
-		}
-
-		// Parse response body if available
-		if result.Success {
-			response.Body = result.Name // This would need to be the actual response body
-		} else {
-			response.Body = map[string]interface{}{
-				"error": result.Error,
-			}
-		}
-
-		return response, nil
+		responseData, err := r.executeForFunction(request, globalTemplateEngine, -1, -1) // Use -1 to indicate system execution
+		return responseData, err
 	})
 
 	// Execute @BeforeUser scripts once before starting workers
@@ -209,19 +196,8 @@ func (r *Runner) executeWithStreaming() error {
 
 			// Set up request executor for this worker
 			templateEngine.SetRequestExecutor(func(request chttp.Request) (*template.Response, error) {
-				result := r.execute(request, templateEngine, workerID, -1)
-				response := &template.Response{
-					StatusCode: result.StatusCode,
-					Headers:    make(map[string]string),
-				}
-				if result.Success {
-					response.Body = result.Name // This would need to be actual response body
-				} else {
-					response.Body = map[string]interface{}{
-						"error": result.Error,
-					}
-				}
-				return response, nil
+				responseData, err := r.executeForFunction(request, templateEngine, workerID, -1)
+				return responseData, err
 			})
 
 			for j := 0; j < r.Iterations; j++ {
@@ -585,4 +561,173 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 	}
 
 	return result
+}
+
+// executeForFunction executes a request and returns a Response object for JavaScript function calls
+func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virtualUserId, iterationID int) (*template.Response, error) {
+	// Execute pre-request script if present
+	if req.PreScript != "" {
+		if err := te.ExecuteScript(req.PreScript, "", virtualUserId, iterationID); err != nil {
+			return &template.Response{
+				StatusCode: 0,
+				Headers:    make(map[string]string),
+				Body: map[string]interface{}{
+					"error": fmt.Sprintf("error executing pre-request script: %v", err),
+				},
+			}, fmt.Errorf("error executing pre-request script: %v", err)
+		}
+	}
+
+	// Handle script-only requests (no HTTP verb/URL)
+	if req.Verb == "" && req.URL == "" {
+		// For script-only requests, just execute the post-request script and return success
+		if req.Script != "" {
+			if err := te.ExecuteScript(req.Script, "", virtualUserId, iterationID); err != nil {
+				return &template.Response{
+					StatusCode: 0,
+					Headers:    make(map[string]string),
+					Body: map[string]interface{}{
+						"error": fmt.Sprintf("error executing script: %v", err),
+					},
+				}, fmt.Errorf("error executing script: %v", err)
+			}
+		}
+		return &template.Response{
+			StatusCode: 200,
+			Headers:    make(map[string]string),
+			Body:       map[string]interface{}{"success": true},
+		}, nil
+	}
+
+	// Render templates in URL
+	renderedURL, err := te.RenderTemplate(req.URL)
+	if err != nil {
+		return &template.Response{
+			StatusCode: 0,
+			Headers:    make(map[string]string),
+			Body: map[string]interface{}{
+				"error": fmt.Sprintf("error rendering URL template: %v", err),
+			},
+		}, fmt.Errorf("error rendering URL template: %v", err)
+	}
+
+	// Render templates in headers
+	renderedHeaders := make(map[string]string)
+	for key, value := range req.Headers {
+		renderedKey, err := te.RenderTemplate(key)
+		if err != nil {
+			return &template.Response{
+				StatusCode: 0,
+				Headers:    make(map[string]string),
+				Body: map[string]interface{}{
+					"error": fmt.Sprintf("error rendering header key template: %v", err),
+				},
+			}, fmt.Errorf("error rendering header key template: %v", err)
+		}
+		renderedValue, err := te.RenderTemplate(value)
+		if err != nil {
+			return &template.Response{
+				StatusCode: 0,
+				Headers:    make(map[string]string),
+				Body: map[string]interface{}{
+					"error": fmt.Sprintf("error rendering header value template: %v", err),
+				},
+			}, fmt.Errorf("error rendering header value template: %v", err)
+		}
+		renderedHeaders[renderedKey] = renderedValue
+	}
+
+	// Render templates in body
+	renderedBody, err := te.RenderTemplate(req.Body)
+	if err != nil {
+		return &template.Response{
+			StatusCode: 0,
+			Headers:    make(map[string]string),
+			Body: map[string]interface{}{
+				"error": fmt.Sprintf("error rendering body template: %v", err),
+			},
+		}, fmt.Errorf("error rendering body template: %v", err)
+	}
+
+	// Create and execute HTTP request
+	client := &nethttp.Client{}
+	request, err := nethttp.NewRequest(req.Verb, renderedURL, bytes.NewBufferString(renderedBody))
+	if err != nil {
+		return &template.Response{
+			StatusCode: 0,
+			Headers:    make(map[string]string),
+			Body: map[string]interface{}{
+				"error": err.Error(),
+			},
+		}, err
+	}
+
+	for key, value := range renderedHeaders {
+		request.Header.Set(key, value)
+	}
+
+	// Execute HTTP request
+	resp, err := client.Do(request)
+	if err != nil {
+		return &template.Response{
+			StatusCode: 0,
+			Headers:    make(map[string]string),
+			Body: map[string]interface{}{
+				"error": err.Error(),
+			},
+		}, err
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(resp.Body)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return &template.Response{
+			StatusCode: resp.StatusCode,
+			Headers:    make(map[string]string),
+			Body: map[string]interface{}{
+				"error": err.Error(),
+			},
+		}, err
+	}
+
+	// Convert response headers to map[string]string
+	responseHeaders := make(map[string]string)
+	for key, values := range resp.Header {
+		if len(values) > 0 {
+			responseHeaders[key] = values[0] // Take the first value if multiple
+		}
+	}
+
+	responseBody := string(body)
+
+	// Parse response body as JSON if possible, otherwise use raw string
+	var parsedBody interface{}
+	if responseBody != "" {
+		if err := json.Unmarshal([]byte(responseBody), &parsedBody); err != nil {
+			// If JSON parsing fails, use raw string
+			parsedBody = responseBody
+		}
+	} else {
+		parsedBody = ""
+	}
+
+	response := &template.Response{
+		StatusCode: resp.StatusCode,
+		Headers:    responseHeaders,
+		Body:       parsedBody,
+	}
+
+	// Execute post-request script if present
+	if req.Script != "" {
+		if err := te.ExecuteScript(req.Script, responseBody, virtualUserId, iterationID); err != nil {
+			return response, fmt.Errorf("error executing script: %v", err)
+		}
+	}
+
+	return response, nil
 }

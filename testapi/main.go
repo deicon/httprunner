@@ -33,6 +33,22 @@ type APIResponse struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
+type PollingJob struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+type PollingJobRequest struct {
+	MinSleepTime int `json:"minSleepTime"`
+}
+
+type JobOperation struct {
+	Type   string
+	JobID  string
+	Job    *PollingJob
+	Result chan *PollingJob
+}
+
 var (
 	users      = make(map[int]*User)
 	products   = make(map[int]*Product)
@@ -40,6 +56,7 @@ var (
 	prodMux    = sync.RWMutex{}
 	nextUserID = 1
 	nextProdID = 1
+	jobChannel = make(chan JobOperation)
 )
 
 func init() {
@@ -51,6 +68,9 @@ func init() {
 }
 
 func main() {
+	// Start job manager goroutine
+	go jobManager()
+
 	http.HandleFunc("/health", healthHandler)
 
 	// User endpoints
@@ -65,6 +85,10 @@ func main() {
 	http.HandleFunc("/api/slow", slowHandler)
 	http.HandleFunc("/api/random-error", randomErrorHandler)
 	http.HandleFunc("/api/echo", echoHandler)
+
+	// Polling job endpoints
+	http.HandleFunc("/api/pollingjob", pollingJobHandler)
+	http.HandleFunc("/api/pollingjob/", pollingJobStatusHandler)
 
 	fmt.Println("Test API Server starting on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -358,5 +382,125 @@ func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, APIResponse{
 		Status:  "error",
 		Message: message,
+	})
+}
+
+func jobManager() {
+	jobs := make(map[string]*PollingJob)
+
+	for op := range jobChannel {
+		log.Default().Printf("job channel received %v", op)
+		switch op.Type {
+		case "create":
+			jobs[op.Job.ID] = op.Job
+			op.Result <- op.Job
+		case "get":
+			if job, exists := jobs[op.JobID]; exists {
+				op.Result <- job
+			} else {
+				op.Result <- nil
+			}
+		case "update":
+			if job, exists := jobs[op.JobID]; exists {
+				job.Status = op.Job.Status
+			}
+			close(op.Result)
+		}
+	}
+}
+
+func pollingJobHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Parse JSON body to get minSleepTime
+	var requestBody PollingJobRequest
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		// If no valid JSON body, use default minSleepTime of 500ms
+		requestBody.MinSleepTime = 500
+	}
+
+	// Validate minSleepTime (minimum 100ms, default 500ms if 0 or negative)
+	minSleepTime := requestBody.MinSleepTime
+	if minSleepTime <= 0 {
+		minSleepTime = 500
+	}
+	if minSleepTime < 100 {
+		minSleepTime = 100
+	}
+
+	// Generate unique job ID
+	jobID := fmt.Sprintf("job_%d_%d", time.Now().Unix(), rand.Intn(10000))
+
+	// Create job with pending status
+	job := &PollingJob{
+		ID:     jobID,
+		Status: "pending",
+	}
+
+	// Store job via channel
+	resultChan := make(chan *PollingJob)
+	jobChannel <- JobOperation{
+		Type:   "create",
+		Job:    job,
+		Result: resultChan,
+	}
+	<-resultChan
+
+	// Start background goroutine
+	go func() {
+		// Use configurable delay with some randomness (minSleepTime + 0-500ms)
+		delay := time.Duration(minSleepTime+rand.Intn(500)) * time.Millisecond
+		time.Sleep(delay)
+
+		// Update job status to completed via channel
+		updateResultChan := make(chan *PollingJob)
+		jobChannel <- JobOperation{
+			Type:   "update",
+			JobID:  jobID,
+			Job:    &PollingJob{Status: "completed"},
+			Result: updateResultChan,
+		}
+		<-updateResultChan
+	}()
+
+	respondJSON(w, http.StatusAccepted, APIResponse{
+		Status: "success",
+		Data:   job,
+	})
+}
+
+func pollingJobStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Extract ID from path /api/pollingjob/{id}
+	path := strings.TrimPrefix(r.URL.Path, "/api/pollingjob/")
+	if path == "" {
+		respondError(w, http.StatusBadRequest, "Job ID required")
+		return
+	}
+
+	// Get job via channel
+	resultChan := make(chan *PollingJob)
+	jobChannel <- JobOperation{
+		Type:   "get",
+		JobID:  path,
+		Result: resultChan,
+	}
+	job := <-resultChan
+
+	if job == nil {
+		respondError(w, http.StatusNotFound, "Job not found")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, APIResponse{
+		Status: "success",
+		Data:   job,
 	})
 }
