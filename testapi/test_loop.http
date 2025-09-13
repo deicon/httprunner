@@ -1,0 +1,37 @@
+###
+# @name Start Job
+POST http://localhost:8080/api/pollingjob
+Content-Type: application/json
+
+{
+  "minSleepTime": 1000
+}
+
+> {%
+    client.global.set("jobId", response.body.data.id);
+    console.log(response.body.data.id)
+%}
+
+###
+# @name Check Job Status
+GET http://localhost:8080/api/pollingjob/{{.jobId}}
+Content-Type: application/json
+
+###
+# @name Polling Loop
+> {%
+
+    for (let i = 0; i < 10; i++) {
+        console.log(`Attempt ${i + 1} to check job status...`);
+        // Function to check job status automatically derived from the GET request above
+        var response = client.check_job_status();
+        console.log(response.body);
+        if (response.body.data.status === 'completed') {
+            console.log('Job completed successfully!');
+            break;
+        } else {
+            console.log('Job not completed yet, waiting 1 second before retrying...');
+            sleep(1000);
+        }
+    }
+%}

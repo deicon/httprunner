@@ -322,6 +322,11 @@ func (te *Engine) initializeVM(virtualUserID, iterationID int) *goja.Runtime {
 
 	_ = vm.Set("client", clientObj)
 
+	// Add simple sleep function
+	_ = vm.Set("sleep", func(millis float64) {
+		time.Sleep(time.Duration(millis * float64(time.Millisecond)))
+	})
+
 	// Add console support for logging
 	consoleObj := vm.NewObject()
 	_ = consoleObj.Set("log", func(messages ...interface{}) {

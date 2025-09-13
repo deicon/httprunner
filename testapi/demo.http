@@ -1,0 +1,16 @@
+###
+POST http://localhost:8080/api/pollingjob
+Content-Type: application/json
+
+{
+  "minSleepTime": 1000
+}
+
+> {%
+  client.global.set("jobId", response.body.data.id);
+  console.log(response.body.data.id)
+%}
+
+###
+GET http://localhost:8080/api/pollingjob/{{jobId}}
+Content-Type: application/json

@@ -45,20 +45,20 @@ if ! docker info > /dev/null 2>&1; then
 fi
 
 # Check if Docker Compose is available
-if ! command -v docker-compose > /dev/null 2>&1; then
-    print_error "docker-compose is not installed. Please install docker-compose and try again."
+if ! command -v docker compose > /dev/null 2>&1; then
+    print_error "docker compose is not installed. Please install docker-compose and try again."
     exit 1
 fi
 
 print_status "Building and starting services..."
 
 # Build and start services
-docker-compose up --wait --wait-timeout 300 --build --remove-orphans -d testapi toxiproxy
+docker compose up --wait --wait-timeout 300 --build --remove-orphans -d testapi toxiproxy
 
 print_status "Waiting for services to be healthy..."
 
 print_status "Services status:"
-docker-compose ps
+docker ps
 
 # Create reports directory if it doesn't exist
 mkdir -p reports
@@ -66,30 +66,30 @@ mkdir -p reports
 print_status "Starting comprehensive tests..."
 
 # Run the HTTP Runner tests
-if docker-compose up --build httprunner; then
+if docker compose up --build httprunner; then
     print_success "✅ All tests completed successfully!"
     
     print_status "Test results are available in the reports/ directory:"
     
     print_status "Container logs:"
     echo "=== Test API Logs ==="
-    docker-compose logs testapi
+    docker logs testapi
     echo ""
     echo "=== HTTP Runner Logs ==="
-    docker-compose logs httprunner
+    docker logs httprunner
     
 else
     print_error "❌ Tests failed!"
     
     print_status "Container logs for debugging:"
     echo "=== Test API Logs ==="
-    docker-compose logs testapi
+    docker logs testapi
     echo ""
     echo "=== Toxiproxy Logs ==="
-    docker-compose logs toxiproxy
+    docker logs toxiproxy
     echo ""
     echo "=== HTTP Runner Logs ==="
-    docker-compose logs httprunner
+    docker logs httprunner
     
     exit 1
 fi
