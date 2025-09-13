@@ -24,6 +24,7 @@ import (
 type Runner struct {
 	Concurrency        int
 	Iterations         int
+	Runtime            int // Runtime in seconds (0 means use iterations)
 	Delay              int
 	Requests           []chttp.Request
 	envFile            string
@@ -39,7 +40,7 @@ type Runner struct {
 }
 
 // NewRunner creates a new Runner with file streaming for memory efficiency
-func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, outputDir string) (*Runner, error) {
+func NewRunner(concurrency, iterations, runtime, delay int, requests []chttp.Request, outputDir string) (*Runner, error) {
 	streamingCollector, err := streaming.NewStreamingCollector(outputDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create streaming collector: %v", err)
@@ -50,6 +51,7 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, out
 	runner := &Runner{
 		Concurrency:        concurrency,
 		Iterations:         iterations,
+		Runtime:            runtime,
 		Delay:              delay,
 		Requests:           requests,
 		StreamingCollector: streamingCollector,
@@ -62,7 +64,7 @@ func NewRunner(concurrency, iterations, delay int, requests []chttp.Request, out
 }
 
 // NewRunnerWithEnvFile creates a new Runner with streaming and env file support
-func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.Request, envFile, outputDir string) (*Runner, error) {
+func NewRunnerWithEnvFile(concurrency, iterations, runtime, delay int, requests []chttp.Request, envFile, outputDir string) (*Runner, error) {
 	streamingCollector, err := streaming.NewStreamingCollector(outputDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create streaming collector: %v", err)
@@ -73,6 +75,7 @@ func NewRunnerWithEnvFile(concurrency, iterations, delay int, requests []chttp.R
 	runner := &Runner{
 		Concurrency:        concurrency,
 		Iterations:         iterations,
+		Runtime:            runtime,
 		Delay:              delay,
 		Requests:           requests,
 		envFile:            envFile,
@@ -200,7 +203,27 @@ func (r *Runner) executeWithStreaming() error {
 				return responseData, err
 			})
 
-			for j := 0; j < r.Iterations; j++ {
+			// Determine execution mode: time-based or iteration-based
+			var endTime time.Time
+			var useTimeBasedExecution bool
+			if r.Runtime > 0 {
+				useTimeBasedExecution = true
+				endTime = time.Now().Add(time.Duration(r.Runtime) * time.Second)
+			}
+
+			j := 0 // iteration counter
+			for {
+				// Check if we should stop based on execution mode
+				if useTimeBasedExecution {
+					if time.Now().After(endTime) {
+						break
+					}
+				} else {
+					if j >= r.Iterations {
+						break
+					}
+				}
+
 				iterationStart := time.Now()
 
 				// Execute @BeforeIteration scripts before each iteration
@@ -214,14 +237,26 @@ func (r *Runner) executeWithStreaming() error {
 				}
 
 				// Execute normal requests
+				shouldBreak := false
 				for _, req := range r.normalRequests {
+					// Check time limit before each request in time-based mode
+					if useTimeBasedExecution && time.Now().After(endTime) {
+						shouldBreak = true
+						break
+					}
+
 					result := r.execute(req, templateEngine, workerID, j)
 					resultChan <- result
 					if !result.Success {
 						fmt.Printf("[Worker %d] Error: %v - Stopping iteration %d\n", workerID, result.Error, j+1)
+						shouldBreak = true
 						break
 					}
 					time.Sleep(time.Duration(r.Delay) * time.Millisecond)
+				}
+
+				if shouldBreak {
+					break
 				}
 
 				// Execute @TeardownIteration scripts after each iteration
@@ -241,6 +276,8 @@ func (r *Runner) executeWithStreaming() error {
 					"iteration": fmt.Sprintf("%d", j),
 				}
 				r.MetricsCollector.RecordIteration(iterationDuration, tags)
+
+				j++ // increment iteration counter
 			}
 
 			// Execute @TeardownUser scripts once after all iterations for this worker

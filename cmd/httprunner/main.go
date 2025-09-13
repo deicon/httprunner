@@ -18,6 +18,7 @@ func main() {
 	// Command line flags
 	concurrency := flag.Int("u", 1, "Number of parallel virtual parallel users")
 	iterations := flag.Int("i", 1, "Number of iterations")
+	runtime := flag.Int("r", 0, "Runtime duration in seconds (0 means use iterations)")
 	delay := flag.Int("d", 0, "Delay between iterations in milliseconds")
 	requestFile := flag.String("f", "", ".http file containing http requests")
 	envFile := flag.String("e", "", ".env file containing environment variables")
@@ -29,6 +30,16 @@ func main() {
 
 	if *requestFile == "" {
 		fmt.Println("Error: -f flag is required")
+		os.Exit(1)
+	}
+
+	// Validate runtime vs iterations parameters
+	if *runtime < 0 {
+		fmt.Println("Error: runtime (-r) must be 0 or positive")
+		os.Exit(1)
+	}
+	if *iterations < 1 {
+		fmt.Println("Error: iterations (-i) must be positive")
 		os.Exit(1)
 	}
 
@@ -62,9 +73,9 @@ func main() {
 
 	// Always use streaming mode
 	if *envFile != "" {
-		r, err = runner.NewRunnerWithEnvFile(*concurrency, *iterations, *delay, requests, *envFile, *reportOutput)
+		r, err = runner.NewRunnerWithEnvFile(*concurrency, *iterations, *runtime, *delay, requests, *envFile, *reportOutput)
 	} else {
-		r, err = runner.NewRunner(*concurrency, *iterations, *delay, requests, *reportOutput)
+		r, err = runner.NewRunner(*concurrency, *iterations, *runtime, *delay, requests, *reportOutput)
 	}
 	if err != nil {
 		fmt.Printf("Error creating streaming runner: %v\n", err)
