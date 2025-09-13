@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -18,6 +19,16 @@ import (
 	"github.com/deicon/httprunner/reporting/types"
 	"github.com/dop251/goja"
 )
+
+// AssertionError represents an assertion failure with custom HTTP status code
+type AssertionError struct {
+	Message    string
+	StatusCode int
+}
+
+func (e *AssertionError) Error() string {
+	return e.Message
+}
 
 // GlobalStore manages global variables shared across requests
 type GlobalStore struct {
@@ -209,6 +220,16 @@ func (te *Engine) initializeVM(virtualUserID, iterationID int) *goja.Runtime {
 		})
 	})
 
+	// Add assert method
+	_ = clientObj.Set("assert", func(conditionHandler func() bool, failureMessage string, statusCode int) {
+		success := conditionHandler()
+		if !success {
+			// Create and throw a JavaScript exception directly
+			exc := vm.NewTypeError(fmt.Sprintf("ASSERTION_ERROR:%d:%s", statusCode, failureMessage))
+			panic(exc)
+		}
+	})
+
 	// Add metrics access if available
 	if te.metricsCollector != nil {
 		metricsObj := vm.NewObject()
@@ -348,6 +369,20 @@ func (te *Engine) ExecuteScript(script string, responseBody string, virtualUserI
 	te.vmMu.Lock()
 	defer te.vmMu.Unlock()
 
+	// Handle assertion panics and convert them to errors
+	var execError error
+	defer func() {
+		if r := recover(); r != nil {
+			if assertErr, ok := r.(*AssertionError); ok {
+				// Convert assertion error to regular error
+				execError = assertErr
+				return
+			}
+			// Re-panic if it's not our assertion error
+			panic(r)
+		}
+	}()
+
 	// Initialize VM if not already done
 	if te.vm == nil {
 		te.vm = te.initializeVM(virtualUserID, iterationID)
@@ -376,7 +411,30 @@ func (te *Engine) ExecuteScript(script string, responseBody string, virtualUserI
 	// Execute the script
 	_, err := vm.RunString(script)
 	if err != nil {
+		// Check if the error is our custom assertion error by parsing the message
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "ASSERTION_ERROR:") {
+			// Extract status code and message from the error
+			if parts := strings.SplitN(errMsg, "ASSERTION_ERROR:", 2); len(parts) == 2 {
+				if subParts := strings.SplitN(parts[1], ":", 2); len(subParts) == 2 {
+					statusCode := 500 // default
+					if code, convErr := strconv.Atoi(strings.TrimSpace(subParts[0])); convErr == nil {
+						statusCode = code
+					}
+					message := strings.TrimSpace(subParts[1])
+					return &AssertionError{
+						Message:    message,
+						StatusCode: statusCode,
+					}
+				}
+			}
+		}
 		return fmt.Errorf("script execution error: %v", err)
+	}
+
+	// Return assertion error if one occurred during execution
+	if execError != nil {
+		return execError
 	}
 
 	return nil

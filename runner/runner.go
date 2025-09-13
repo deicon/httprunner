@@ -318,7 +318,12 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 	if req.PreScript != "" {
 		if err := te.ExecuteScript(req.PreScript, "", virtualUserId, iterationID); err != nil {
 			result.Success = false
-			result.Error = fmt.Sprintf("error executing pre-request script: %v", err)
+			if assertErr, ok := err.(*template.AssertionError); ok {
+				result.StatusCode = assertErr.StatusCode
+				result.Error = assertErr.Message
+			} else {
+				result.Error = fmt.Sprintf("error executing pre-request script: %v", err)
+			}
 			return result
 		}
 	}
@@ -329,7 +334,12 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 		if req.Script != "" {
 			if err := te.ExecuteScript(req.Script, "", virtualUserId, iterationID); err != nil {
 				result.Success = false
-				result.Error = fmt.Sprintf("error executing script: %v", err)
+				if assertErr, ok := err.(*template.AssertionError); ok {
+					result.StatusCode = assertErr.StatusCode
+					result.Error = assertErr.Message
+				} else {
+					result.Error = fmt.Sprintf("error executing script: %v", err)
+				}
 				return result
 			}
 		}
@@ -542,7 +552,12 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 	if req.Script != "" {
 		if err := te.ExecuteScript(req.Script, responseBody, virtualUserId, iterationID); err != nil {
 			result.Success = false
-			result.Error = fmt.Sprintf("error executing script: %v", err)
+			if assertErr, ok := err.(*template.AssertionError); ok {
+				result.StatusCode = assertErr.StatusCode
+				result.Error = assertErr.Message
+			} else {
+				result.Error = fmt.Sprintf("error executing script: %v", err)
+			}
 			return result
 		}
 	}
@@ -567,14 +582,39 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virtualUserId, iterationID int) (*template.Response, error) {
 	// Execute pre-request script if present
 	if req.PreScript != "" {
-		if err := te.ExecuteScript(req.PreScript, "", virtualUserId, iterationID); err != nil {
+		var scriptErr error
+		var assertErr *template.AssertionError
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if ae, ok := r.(*template.AssertionError); ok {
+						assertErr = ae
+						return
+					}
+					panic(r) // Re-panic if it's not our assertion error
+				}
+			}()
+			scriptErr = te.ExecuteScript(req.PreScript, "", virtualUserId, iterationID)
+		}()
+		
+		if assertErr != nil {
+			return &template.Response{
+				StatusCode: assertErr.StatusCode,
+				Headers:    make(map[string]string),
+				Body: map[string]interface{}{
+					"error": assertErr.Message,
+				},
+			}, assertErr
+		}
+		
+		if scriptErr != nil {
 			return &template.Response{
 				StatusCode: 0,
 				Headers:    make(map[string]string),
 				Body: map[string]interface{}{
-					"error": fmt.Sprintf("error executing pre-request script: %v", err),
+					"error": fmt.Sprintf("error executing pre-request script: %v", scriptErr),
 				},
-			}, fmt.Errorf("error executing pre-request script: %v", err)
+			}, fmt.Errorf("error executing pre-request script: %v", scriptErr)
 		}
 	}
 
@@ -582,14 +622,39 @@ func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virt
 	if req.Verb == "" && req.URL == "" {
 		// For script-only requests, just execute the post-request script and return success
 		if req.Script != "" {
-			if err := te.ExecuteScript(req.Script, "", virtualUserId, iterationID); err != nil {
+			var scriptErr error
+			var assertErr *template.AssertionError
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						if ae, ok := r.(*template.AssertionError); ok {
+							assertErr = ae
+							return
+						}
+						panic(r) // Re-panic if it's not our assertion error
+					}
+				}()
+				scriptErr = te.ExecuteScript(req.Script, "", virtualUserId, iterationID)
+			}()
+			
+			if assertErr != nil {
+				return &template.Response{
+					StatusCode: assertErr.StatusCode,
+					Headers:    make(map[string]string),
+					Body: map[string]interface{}{
+						"error": assertErr.Message,
+					},
+				}, assertErr
+			}
+			
+			if scriptErr != nil {
 				return &template.Response{
 					StatusCode: 0,
 					Headers:    make(map[string]string),
 					Body: map[string]interface{}{
-						"error": fmt.Sprintf("error executing script: %v", err),
+						"error": fmt.Sprintf("error executing script: %v", scriptErr),
 					},
-				}, fmt.Errorf("error executing script: %v", err)
+				}, fmt.Errorf("error executing script: %v", scriptErr)
 			}
 		}
 		return &template.Response{
@@ -724,8 +789,32 @@ func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virt
 
 	// Execute post-request script if present
 	if req.Script != "" {
-		if err := te.ExecuteScript(req.Script, responseBody, virtualUserId, iterationID); err != nil {
-			return response, fmt.Errorf("error executing script: %v", err)
+		var scriptErr error
+		var assertErr *template.AssertionError
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if ae, ok := r.(*template.AssertionError); ok {
+						assertErr = ae
+						return
+					}
+					panic(r) // Re-panic if it's not our assertion error
+				}
+			}()
+			scriptErr = te.ExecuteScript(req.Script, responseBody, virtualUserId, iterationID)
+		}()
+		
+		if assertErr != nil {
+			// Return the response with assertion error details
+			response.StatusCode = assertErr.StatusCode
+			response.Body = map[string]interface{}{
+				"error": assertErr.Message,
+			}
+			return response, assertErr
+		}
+		
+		if scriptErr != nil {
+			return response, fmt.Errorf("error executing script: %v", scriptErr)
 		}
 	}
 

@@ -359,7 +359,7 @@ POST http://localhost:8080/api/pollingjob
 Content-Type: application/json
 
 {
-  "minSleepTime": 1000
+  "minSleepTime": 5000
 }
 
 > {%
@@ -376,7 +376,7 @@ Content-Type: application/json
 # @name Polling Loop
 > {%
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 1; i++) {
         console.log(`Attempt ${i + 1} to check job status...`);
         // Function to check job status automatically derived from the GET request above
         var response = client.check_job_status();
@@ -389,4 +389,7 @@ Content-Type: application/json
             sleep(1000);
         }
     }
+    client.assert(function() {
+        return response.body.data.status === 'completed';
+    }, 'Job should complete within 10 attempts', 500);
 %}

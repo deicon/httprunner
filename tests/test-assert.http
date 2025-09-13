@@ -1,0 +1,103 @@
+### 
+# @name Test Assert Pre-request Success
+> {%
+// Pre-request script: This should pass
+client.global.set("testValue", "success");
+client.assert(function() {
+    return client.global.get("testValue") === "success";
+}, "Test value should be 'success'", 400);
+%}
+
+POST https://httpbin.org/post
+Content-Type: application/json
+
+{
+  "message": "This request should execute normally"
+}
+
+> {%
+// Post-request script: This should also pass
+client.assert(function() {
+    return response.body && response.body.json && response.body.json.message === "This request should execute normally";
+}, "Response should contain our message", 422);
+
+console.log("✅ All assertions passed for successful request");
+%}
+
+### 
+# @name Test Assert Pre-request Failure
+> {%
+// Pre-request script: This should fail and prevent the HTTP request
+client.global.set("authToken", null);
+client.assert(function() {
+    return client.global.get("authToken") !== null;
+}, "Authentication token is required", 401);
+%}
+
+POST https://httpbin.org/post
+Content-Type: application/json
+
+{
+  "message": "This request should NOT execute due to pre-request assertion failure"
+}
+
+> {%
+console.log("❌ This post-request script should never run");
+%}
+
+### 
+# @name Test Assert Post-request Failure
+POST https://httpbin.org/status/500
+
+> {%
+// Post-request script: This should fail after receiving HTTP 500
+client.assert(function() {
+    return false; // Always fail for demonstration
+}, "Server returned error status", 502);
+
+console.log("❌ This should never be logged");
+%}
+
+### 
+# @name Test Assert with Response Validation
+POST https://httpbin.org/post
+Content-Type: application/json
+
+{
+  "user_id": 123,
+  "email": "test@example.com"
+}
+
+> {%
+// Post-request validation
+client.assert(function() {
+    return response.body && response.body.json;
+}, "Response should contain JSON data", 502);
+
+client.assert(function() {
+    return response.body.json.user_id === 123;
+}, "User ID should match the request", 422);
+
+client.assert(function() {
+    var email = response.body.json.email;
+    return email && email.includes("@");
+}, "Email should be valid format", 400);
+
+console.log("✅ All response validations passed");
+%}
+
+### 
+# @name Test Assert with Performance Check
+GET https://httpbin.org/delay/1
+
+> {%
+// Performance assertion
+var duration = client.metrics.getCurrent("http_req_duration");
+client.assert(function() {
+    return duration && duration < 5000; // Should be under 5 seconds
+}, "Request should complete within 5 seconds", 408);
+
+console.log("✅ Performance check passed: " + duration + "ms");
+%}
+
+###

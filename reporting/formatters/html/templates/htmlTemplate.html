@@ -140,43 +140,45 @@
 </div>
 {{end}}
 
-<!--<h3>Request Details</h3>-->
-<!--<table>-->
-<!--    <tr>-->
-<!--        <th>#</th>-->
-<!--        <th>Name</th>-->
-<!--        <th>Method</th>-->
-<!--        <th>URL</th>-->
-<!--        <th>Status</th>-->
-<!--        <th>Response Time</th>-->
-<!--        <th>Checks</th>-->
-<!--        <th>Timestamp</th>-->
-<!--    </tr>-->
-<!--    {{range $index, $req := .RequestDetails}}-->
-<!--    <tr>-->
-<!--        <td>{{add $index 1}}</td>-->
-<!--        <td>{{$req.Name}}</td>-->
-<!--        <td>{{$req.Verb}}</td>-->
-<!--        <td>{{$req.URL}}</td>-->
-<!--        <td>{{if $req.Success}}<span class="success">{{$req.StatusCode}} OK</span>{{else}}<span class="error">{{$req.Error}}</span>{{end}}</td>-->
-<!--        <td>{{$req.ResponseTime}}</td>-->
-<!--        <td>-->
-<!--            {{if gt (len $req.Checks) 0}}-->
-<!--            {{range $checkIndex, $check := $req.Checks}}-->
-<!--            {{if gt $checkIndex 0}}<br>{{end}}-->
-<!--            {{if $check.Success}}-->
-<!--            <span class="success">✓ {{$check.Name}}</span>-->
-<!--            {{else}}-->
-<!--            <span class="error">✗ {{$check.Name}}: {{$check.FailureMessage}}</span>-->
-<!--            {{end}}-->
-<!--            {{end}}-->
-<!--            {{else}}-->
-<!--            - -->
-<!--            {{end}}-->
-<!--        </td>-->
-<!--        <td>{{$req.Timestamp.Format "2006-01-02 15:04:05"}}</td>-->
-<!--    </tr>-->
-<!--    {{end}}-->
-<!--</table>-->
+<h3>Request Details</h3>
+<table>
+    <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Method</th>
+        <th>URL</th>
+        <th>Status</th>
+        <th>Response Time</th>
+        <th>Checks</th>
+        <th>Error</th>
+        <th>Timestamp</th>
+    </tr>
+    {{range $index, $req := .RequestDetails}}
+    <tr>
+        <td>{{add $index 1}}</td>
+        <td>{{$req.Name}}</td>
+        <td>{{$req.Verb}}</td>
+        <td>{{$req.URL}}</td>
+        <td>{{if $req.Success}}<span class="success">{{$req.StatusCode}} ✓</span>{{else}}<span class="error">{{$req.StatusCode}} ✗</span>{{end}}</td>
+        <td>{{$req.ResponseTime}}</td>
+        <td>
+            {{if gt (len $req.Checks) 0}}
+            {{range $checkIndex, $check := $req.Checks}}
+            {{if gt $checkIndex 0}}<br>{{end}}
+            {{if $check.Success}}
+            <span class="success">✓ {{$check.Name}}</span>
+            {{else}}
+            <span class="error">✗ {{$check.Name}}: {{$check.FailureMessage}}</span>
+            {{end}}
+            {{end}}
+            {{else}}
+            -
+            {{end}}
+        </td>
+        <td>{{if not $req.Success}}{{$req.Error}}{{else}}-{{end}}</td>
+        <td>{{$req.Timestamp.Format "2006-01-02 15:04:05"}}</td>
+    </tr>
+    {{end}}
+</table>
 </body>
 </html>

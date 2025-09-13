@@ -1,0 +1,26 @@
+### 
+# @name Simple Assert Test
+> {%
+console.log("Pre-request script starting");
+try {
+    client.assert(function() {
+        return true;
+    }, "This should pass", 400);
+    console.log("Assert passed successfully");
+} catch (e) {
+    console.log("Error in assert: " + e);
+}
+%}
+
+POST https://httpbin.org/post
+Content-Type: application/json
+
+{
+  "test": "simple"
+}
+
+> {%
+console.log("Post-request script executed");
+%}
+
+###

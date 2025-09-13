@@ -342,6 +342,7 @@
                         <th>Status</th>
                         <th>Response Time</th>
                         <th>Checks</th>
+                        <th>Error</th>
                         <th>Timestamp</th>
                     </tr>
                     {{range $requestIndex, $request := $iteration.RequestResults}}
@@ -354,7 +355,7 @@
                             {{if $request.Success}}
                             <span class="success">{{$request.StatusCode}} ✓</span>
                             {{else}}
-                            <span class="error">{{$request.Error}} ✗</span>
+                            <span class="error">{{$request.StatusCode}} ✗</span>
                             {{end}}
                         </td>
                         <td>{{$request.ResponseTime}}</td>
@@ -372,6 +373,7 @@
                             -
                             {{end}}
                         </td>
+                        <td>{{if not $request.Success}}{{$request.Error}}{{else}}-{{end}}</td>
                         <td class="timestamp">{{$request.Timestamp.Format "15:04:05.000"}}</td>
                     </tr>
                     {{end}}
