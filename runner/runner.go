@@ -596,7 +596,7 @@ func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virt
 			}()
 			scriptErr = te.ExecuteScript(req.PreScript, "", virtualUserId, iterationID)
 		}()
-		
+
 		if assertErr != nil {
 			return &template.Response{
 				StatusCode: assertErr.StatusCode,
@@ -606,7 +606,7 @@ func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virt
 				},
 			}, assertErr
 		}
-		
+
 		if scriptErr != nil {
 			return &template.Response{
 				StatusCode: 0,
@@ -636,7 +636,7 @@ func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virt
 				}()
 				scriptErr = te.ExecuteScript(req.Script, "", virtualUserId, iterationID)
 			}()
-			
+
 			if assertErr != nil {
 				return &template.Response{
 					StatusCode: assertErr.StatusCode,
@@ -646,7 +646,7 @@ func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virt
 					},
 				}, assertErr
 			}
-			
+
 			if scriptErr != nil {
 				return &template.Response{
 					StatusCode: 0,
@@ -803,7 +803,7 @@ func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virt
 			}()
 			scriptErr = te.ExecuteScript(req.Script, responseBody, virtualUserId, iterationID)
 		}()
-		
+
 		if assertErr != nil {
 			// Return the response with assertion error details
 			response.StatusCode = assertErr.StatusCode
@@ -812,7 +812,7 @@ func (r *Runner) executeForFunction(req chttp.Request, te *template.Engine, virt
 			}
 			return response, assertErr
 		}
-		
+
 		if scriptErr != nil {
 			return response, fmt.Errorf("error executing script: %v", scriptErr)
 		}
