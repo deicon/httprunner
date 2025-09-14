@@ -27,7 +27,7 @@ test-coverage:
 .PHONY: build
 build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner ./cmd/httprunner
-	go build $(LDFLAGS) -o $(BUILD_DIR)/harparserr ./cmd/harparser
+	go build $(LDFLAGS) -o $(BUILD_DIR)/harparser ./cmd/harparser
 
 # Build for all platforms
 .PHONY: build-all
@@ -44,7 +44,7 @@ build-all: clean
 	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner-windows-386.exe ./cmd/httprunner
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner-windows-amd64.exe ./cmd/httprunner
 	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/httprunner-windows-arm64.exe ./cmd/httprunner
-	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/harparsers-windows-386.exe ./cmd/harparser
+	GOOS=windows GOARCH=386 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-386.exe ./cmd/harparser
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-amd64.exe ./cmd/harparser
 	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/harparser-windows-arm64.exe ./cmd/harparser
 	
