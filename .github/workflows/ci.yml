@@ -255,15 +255,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20.8.1'
 
       - name: Run semantic-release
         uses: cycjimmy/semantic-release-action@v4
         with:
           semantic_version: 23
-          branches: |
-            ["develop"]
-          extra_plugins: |
-            ["@semantic-release/commit-analyzer", "@semantic-release/release-notes-generator", "@semantic-release/github"]
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
