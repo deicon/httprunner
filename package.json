@@ -17,6 +17,10 @@
   "devDependencies": {
     "husky": "^9.1.7",
     "@commitlint/cli": "^19.4.0",
-    "@commitlint/config-conventional": "^19.4.0"
+    "@commitlint/config-conventional": "^19.4.0",
+    "@semantic-release/commit-analyzer": "^13.0.0",
+    "@semantic-release/release-notes-generator": "^14.0.0",
+    "@semantic-release/github": "^11.0.0",
+    "semantic-release": "^24.0.0"
   }
 }
