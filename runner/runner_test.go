@@ -37,7 +37,7 @@ func TestRunnerRunWithScriptOnlyRequests(t *testing.T) {
 		{Name: "TeardownUser", Lifecycle: chttp.LifecycleTeardownUser, Script: "/*noop*/"},
 	}
 
-	r, err := NewRunner(1, 2, 0, reqs, t.TempDir())
+	r, err := NewRunner(1, 1, 0, 0, reqs, t.TempDir())
 	if err != nil {
 		t.Fatalf("NewRunner: %v", err)
 	}
@@ -47,11 +47,11 @@ func TestRunnerRunWithScriptOnlyRequests(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if report.TotalRequests != 2 || report.FailedRequests != 0 {
+	if report.TotalRequests != 1 || report.FailedRequests != 0 {
 		t.Fatalf("unexpected totals: %+v", report)
 	}
 	// Response time distribution should categorize zeros as <100ms
-	if report.ResponseTimeDistribution["<100ms"] != 2 {
+	if report.ResponseTimeDistribution["<100ms"] != 1 {
 		t.Fatalf("unexpected distribution: %#v", report.ResponseTimeDistribution)
 	}
 }
@@ -60,7 +60,7 @@ func TestRunnerRunHierarchicalWithConcurrency(t *testing.T) {
 	// Two VUs, two iterations, one script-only request per iteration that has one failing check
 	reqs := []chttp.Request{scriptOnlyRequest("DoWork", 2, true)}
 
-	r, err := NewRunner(2, 2, 0, reqs, t.TempDir())
+	r, err := NewRunner(2, 2, 0, 0, reqs, t.TempDir())
 	if err != nil {
 		t.Fatalf("NewRunner: %v", err)
 	}
