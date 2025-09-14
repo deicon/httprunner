@@ -177,15 +177,38 @@ jobs:
       
     - name: Create release archives
       run: |
+        set -euo pipefail
+        TAG="${{ github.event.release.tag_name }}"
+        echo "Packaging archives for ${TAG}"
         cd build
+        shopt -s nullglob
         for file in httprunner-* harparser-*; do
-          if [[ "$file" == *".exe" ]]; then
-            # Windows executable - create zip
-            zip "${file%.exe}.zip" "$file"
+          base=$(basename "$file")
+          # Parse tool, os, arch
+          tool=${base%%-*}
+          rest=${base#${tool}-}
+          os=${rest%%-*}
+          arch_ext=${rest#${os}-}
+          arch=${arch_ext%%.*}
+          ext=""
+          if [[ "$base" == *.exe ]]; then
+            # Windows
+            ext="zip"
+            out="${tool}_${TAG}_windows_${arch}.${ext}"
+            tmpdir=$(mktemp -d)
+            cp "$base" "$tmpdir/${tool}.exe"
+            (cd "$tmpdir" && zip -q "${OLDPWD}/${out}" "${tool}.exe")
+            rm -rf "$tmpdir"
           else
-            # Unix executable - create tar.gz
-            tar -czf "${file}.tar.gz" "$file"
+            # Unix
+            ext="tar.gz"
+            out="${tool}_${TAG}_${os}_${arch}.${ext}"
+            tmpdir=$(mktemp -d)
+            cp "$base" "$tmpdir/${tool}"
+            (cd "$tmpdir" && tar -czf "${OLDPWD}/${out}" "${tool}")
+            rm -rf "$tmpdir"
           fi
+          echo "Created $out"
         done
         
     - name: Upload release assets
@@ -196,6 +219,18 @@ jobs:
           build/*.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update Homebrew formulas
+      if: success()
+      run: |
+        chmod +x .github/scripts/generate_formula.sh
+        TAG="${{ github.event.release.tag_name }}"
+        .github/scripts/generate_formula.sh "$TAG"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add Formula/httprunner.rb Formula/harparser.rb
+        git commit -m "chore(homebrew): update formulas for ${TAG}"
+        git push origin "HEAD:${{ github.event.repository.default_branch }}"
 
   docker:
     name: Docker Build

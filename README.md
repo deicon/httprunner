@@ -2,6 +2,52 @@
 
 A Go-based command-line tool for running multiple, parallel HTTP requests.
 
+## Installation
+
+### Using `go install`
+
+Prerequisites: Go 1.20+ and a working internet connection.
+
+Install the CLI tools directly from the module:
+
+```bash
+go install github.com/deicon/httprunner/cmd/httprunner@latest
+go install github.com/deicon/httprunner/cmd/harparser@latest
+```
+
+Ensure your install bin directory is on PATH:
+
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"   # if GOBIN not set
+```
+
+Verify installation and version:
+
+```bash
+httprunner -version
+harparser -version
+```
+
+Notes:
+- Replace `@latest` with a specific tag (e.g., `@vX.Y.Z`) to pin a version.
+- To upgrade later, rerun the same `go install ...@latest` commands.
+
+### Homebrew (macOS/Linux)
+
+Once a release is published, prebuilt bottles are provided via Formula files in this repo. Install directly from the raw formula URLs:
+
+```bash
+# httprunner
+brew install --formula https://raw.githubusercontent.com/deicon/httprunner/refs/heads/main/Formula/httprunner.rb
+
+# harparser
+brew install --formula https://raw.githubusercontent.com/deicon/httprunner/refs/heads/main/Formula/harparser.rb
+```
+
+Notes:
+- Homebrew supports macOS and Linux; Windows users can download the ZIP asset from Releases.
+- The CI release job updates these formulas with per-platform URLs and SHA256 checksums automatically on every tagged release.
+
 ## Project Structure
 
 ```
