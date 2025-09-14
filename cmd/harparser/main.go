@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// version is populated at build time via ldflags (-X main.version=...)
+var version = "dev"
+
 type multiStringFlag []string
 
 func (m *multiStringFlag) String() string {
@@ -107,6 +110,10 @@ func parseFlags() Config {
 	var config Config
 	var filters multiStringFlag
 
+	// version flags are parsed early via the default CommandLine; support -version and -V
+	showVersion := flag.Bool("version", false, "Print version and exit")
+	flag.BoolVar(showVersion, "V", false, "Print version and exit")
+
 	flag.StringVar(&config.InputFile, "f", "", "Input HAR file path (required)")
 	flag.StringVar(&config.InputFile, "file", "", "Input HAR file path (required)")
 	flag.StringVar(&config.OutputFile, "o", "", "Output .http file path (optional, prints to stdout if not specified)")
@@ -116,6 +123,11 @@ func parseFlags() Config {
 	flag.BoolVar(&config.Help, "help", false, "Show help")
 
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	config.Filters = []string(filters)
 	return config

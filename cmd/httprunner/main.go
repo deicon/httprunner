@@ -14,8 +14,13 @@ import (
 	"github.com/deicon/httprunner/runner"
 )
 
+// version is populated at build time via ldflags (-X main.version=...)
+var version = "dev"
+
 func main() {
 	// Command line flags
+	showVersion := flag.Bool("version", false, "Print version and exit")
+	flag.BoolVar(showVersion, "V", false, "Print version and exit")
 	concurrency := flag.Int("u", 1, "Number of parallel virtual parallel users")
 	iterations := flag.Int("i", 1, "Number of iterations")
 	runtime := flag.Int("r", 0, "Runtime duration in seconds (0 means use iterations)")
@@ -27,6 +32,11 @@ func main() {
 	reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
 
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	if *requestFile == "" {
 		fmt.Println("Error: -f flag is required")
