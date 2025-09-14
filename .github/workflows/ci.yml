@@ -247,7 +247,7 @@ jobs:
     needs: [test, build]
     runs-on: ubuntu-latest
     # Run only when a PR into develop is closed and merged (supports squash/rebase/merge)
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'develop'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
