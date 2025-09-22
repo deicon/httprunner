@@ -175,41 +175,36 @@ Accept: application/json
 #### Template and scripting example:
 ```
 ### 
-# @name Tarifrechner anlegen
+# @name Ressource anlegen
 > {%
 // Pre-request script: Set up dynamic values before the request
 client.global.set("currentTimestamp", Date.now().toString())
 client.global.set("requestId", "req_" + Math.random().toString(36).substring(7))
 %}
 
-POST {{.BASEURL}}/api/{{.APIVERSION}}/tarifrechner
+POST {{.BASEURL}}/api/{{.APIVERSION}}/ressource
 Authorization: Bearer {{.TOKEN}}
 Content-Type: application/json
 X-Request-ID: {{.requestId}}
 
 {
-"tarifrechnerModus": {
+"modus": {
 "modus": "{{.MODUS}}",
 "mandant": "ORGA",
-"haushaltsId": "{{.HAUSHALTSID}}"
+"partnerID": "{{.PARTNERID}}"
 },
-"produktKonfigurationId": "Kontoeroeffnung",
-"kundennummern": [
-    "99152160"
-],
 "timestamp": "{{.currentTimestamp}}"
 }
 
 > {%
 // Post-request script: Extract values from response
 var jsonData = response.body
-client.global.set("tarifrechnerId", jsonData.id)
-client.global.set("beteiligter_1", jsonData.beteiligte ? jsonData.beteiligte[0].id : "default")
+client.global.set("ID", jsonData.id)
 %}
 
 ### 
 # @name Get Tarifrechner
-GET {{.BASEURL}}/api/{{.APIVERSION}}/tarifrechner/{{.tarifrechnerId}}
+GET {{.BASEURL}}/api/{{.APIVERSION}}/ressource/{{.ID}}
 Authorization: Bearer {{.TOKEN}}
 Accept: application/json
 
