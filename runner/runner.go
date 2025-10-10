@@ -485,6 +485,8 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 
 	// Calculate timing metrics
 	duration := gotResponse.Sub(startTime)
+	// Ensure the measured duration is recorded on the result for reporting
+	result.ResponseTime = duration
 	blocked := time.Duration(0)
 	connecting := time.Duration(0)
 	sending := time.Duration(0)
