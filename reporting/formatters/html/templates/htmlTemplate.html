@@ -30,6 +30,12 @@
     <div class="metric"><strong>Min Response Time:</strong> {{.MinResponseTime}}</div>
     <div class="metric"><strong>Max Response Time:</strong> {{.MaxResponseTime}}</div>
     <div class="metric"><strong>Total Duration:</strong> {{.TotalDuration}}</div>
+    {{if gt .TotalVirtualUsers 0}}
+    <div class="metric"><strong>Virtual Users:</strong> {{.TotalVirtualUsers}}</div>
+    {{end}}
+    {{if gt .RuntimeSeconds 0.0}}
+    <div class="metric"><strong>Runtime:</strong> {{printf "%.1fs" .RuntimeSeconds}}</div>
+    {{end}}
 </div>
 
 {{if .ResponseTimeDistribution}}
@@ -92,10 +98,15 @@
 
     <h4>Counters</h4>
     <table style="margin-bottom: 20px;">
-        <tr><th>Metric</th><th>Value</th><th>Count</th></tr>
+        <tr><th>Metric</th><th>Value</th><th>Count</th><th>Rate</th></tr>
         {{range $name, $summary := .MetricsSummaries}}
         {{if eq $summary.Type "counter"}}
-        <tr><td>{{$name}}</td><td>{{printf "%.0f" $summary.Sum}}</td><td>{{$summary.Count}}</td></tr>
+        <tr>
+            <td>{{$name}}</td>
+            <td>{{printf "%.0f" $summary.Sum}}</td>
+            <td>{{$summary.Count}}</td>
+            <td>{{if gt $summary.Rate 0.0}}{{printf "%.1f %s" $summary.Rate $summary.RateUnit}}{{else}}-{{end}}</td>
+        </tr>
         {{end}}
         {{end}}
     </table>
@@ -138,6 +149,38 @@
         {{end}}
     </table>
 </div>
+{{end}}
+
+{{if .PerVUMetrics}}
+<div class="summary">
+    <h3>👤 Per Virtual User Metrics</h3>
+    <table style="margin-bottom: 20px;">
+        <tr><th>Metric</th><th>Per VU</th></tr>
+        {{range $name, $value := .PerVUMetrics}}
+        <tr>
+            <td>{{stripSuffix $name "_per_vu"}}</td>
+            <td>{{printf "%.2f" $value}}</td>
+        </tr>
+        {{end}}
+    </table>
+    <small>Values represent totals normalized by number of virtual users.</small>
+  </div>
+{{end}}
+
+{{if .PerIterationMetrics}}
+<div class="summary">
+    <h3>🔁 Per Iteration Metrics</h3>
+    <table style="margin-bottom: 20px;">
+        <tr><th>Metric</th><th>Per Iteration</th></tr>
+        {{range $name, $value := .PerIterationMetrics}}
+        <tr>
+            <td>{{stripSuffix $name "_per_iter"}}</td>
+            <td>{{printf "%.2f" $value}}</td>
+        </tr>
+        {{end}}
+    </table>
+    <small>Values represent totals normalized by iteration count.</small>
+  </div>
 {{end}}
 
 <h3>Request Details</h3>
