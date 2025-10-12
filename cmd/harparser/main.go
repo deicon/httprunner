@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -32,7 +33,8 @@ type Log struct {
 }
 
 type Entry struct {
-	Request Request `json:"request"`
+	Request  Request  `json:"request"`
+	Response Response `json:"response"`
 }
 
 type Request struct {
@@ -58,12 +60,28 @@ type Parameter struct {
 	Value string `json:"value"`
 }
 
+type Response struct {
+	Status  int      `json:"status"`
+	Headers []Header `json:"headers"`
+	Content Content  `json:"content"`
+}
+
+type Content struct {
+	Size     int    `json:"size"`
+	MimeType string `json:"mimeType"`
+	Text     string `json:"text"`
+	Encoding string `json:"encoding"`
+}
+
 type Config struct {
 	InputFile  string
 	OutputFile string
 	Filters    []string
 	Help       bool
 }
+
+// includeResponseBody toggles inclusion of response body as comments
+var includeResponseBody bool
 
 func main() {
 	config := parseFlags()
@@ -119,6 +137,8 @@ func parseFlags() Config {
 	flag.StringVar(&config.OutputFile, "o", "", "Output .http file path (optional, prints to stdout if not specified)")
 	flag.StringVar(&config.OutputFile, "output", "", "Output .http file path (optional, prints to stdout if not specified)")
 	flag.Var(&filters, "filter", "Filter requests by URL substring (can be used multiple times)")
+	flag.BoolVar(&includeResponseBody, "v", false, "Include response body as commented output")
+	flag.BoolVar(&includeResponseBody, "verbose", false, "Include response body as commented output")
 	flag.BoolVar(&config.Help, "h", false, "Show help")
 	flag.BoolVar(&config.Help, "help", false, "Show help")
 
@@ -143,6 +163,7 @@ func printHelp() {
 	fmt.Println("  -f, -file     Input HAR file path (required)")
 	fmt.Println("  -o, -output   Output .http file path (optional, prints to stdout if not specified)")
 	fmt.Println("  -filter       Filter requests by URL substring (can be used multiple times)")
+	fmt.Println("  -v, -verbose  Include response body as commented output")
 	fmt.Println("  -h, -help     Show this help message")
 	fmt.Println("")
 	fmt.Println("Examples:")
@@ -168,22 +189,27 @@ func parseHARFile(filename string) (*HAR, error) {
 }
 
 func filterEntries(entries []Entry, filters []string) []Entry {
-	if len(filters) == 0 {
-		return entries
-	}
-
 	var filtered []Entry
 	for _, entry := range entries {
-		// Check if URL matches any of the filters
-		matches := false
+		url := entry.Request.URL
+
+		// Always skip JS and common image assets
+		if isIgnorableAsset(url) {
+			continue
+		}
+
+		// If no filters specified, keep the entry (already skipped ignorable types)
+		if len(filters) == 0 {
+			filtered = append(filtered, entry)
+			continue
+		}
+
+		// Otherwise, include only if it matches any filter substring
 		for _, filter := range filters {
-			if strings.Contains(entry.Request.URL, filter) {
-				matches = true
+			if strings.Contains(url, filter) {
+				filtered = append(filtered, entry)
 				break
 			}
-		}
-		if matches {
-			filtered = append(filtered, entry)
 		}
 	}
 
@@ -216,6 +242,26 @@ func generateHTTPFile(entries []Entry) string {
 		if req.PostData != nil && req.PostData.Text != "" {
 			content.WriteString("\n")
 			content.WriteString(req.PostData.Text)
+		}
+
+		// Optionally include response body as commented lines
+		if includeResponseBody {
+			// Prefer decoded text if content is base64-encoded
+			respText := entry.Response.Content.Text
+			if respText != "" && strings.EqualFold(entry.Response.Content.Encoding, "base64") {
+				if decoded, err := base64.StdEncoding.DecodeString(respText); err == nil {
+					respText = string(decoded)
+				}
+			}
+			if strings.TrimSpace(respText) != "" {
+				content.WriteString("\n\n")
+				content.WriteString("# Response body\n")
+				for _, line := range strings.Split(respText, "\n") {
+					content.WriteString("# ")
+					content.WriteString(line)
+					content.WriteString("\n")
+				}
+			}
 		}
 
 		// Add separation between requests
@@ -305,4 +351,48 @@ func filterHeaders(headers []Header) []Header {
 
 func writeHTTPFile(filename, content string) error {
 	return os.WriteFile(filename, []byte(content), 0644)
+}
+
+// isIgnorableAsset returns true for URLs that look like static assets we don't
+// want in the extracted .http file, namely .js files and common image types.
+func isIgnorableAsset(u string) bool {
+	// Strip query params and fragments for extension checks
+	if i := strings.IndexByte(u, '?'); i != -1 {
+		u = u[:i]
+	}
+	if i := strings.IndexByte(u, '#'); i != -1 {
+		u = u[:i]
+	}
+	lu := strings.ToLower(u)
+
+	// Common static path hints
+	staticHints := []string{"/_next/", "/static/", "/assets/", "/images/", "/img/", "/fonts/", "/css/", "/js/"}
+	for _, h := range staticHints {
+		if strings.Contains(lu, h) {
+			return true
+		}
+	}
+
+	// Skip common static file extensions (JS, CSS, images, fonts, media, maps, html)
+	exts := []string{
+		// Scripts, styles, maps
+		".js", ".mjs", ".css", ".map",
+		// Images
+		".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".bmp", ".tif", ".tiff", ".avif",
+		// Fonts
+		".woff", ".woff2", ".ttf", ".otf", ".eot",
+		// Media
+		".mp3", ".wav", ".ogg", ".oga", ".flac", ".aac", ".m4a",
+		".mp4", ".m4v", ".webm", ".ogv", ".mov",
+		// Docs/pages and misc static
+		".pdf", ".txt", ".html", ".htm", ".xml", ".manifest",
+		// Icons/manifests
+		".favico", ".favicon", ".appcache",
+	}
+	for _, ext := range exts {
+		if strings.HasSuffix(lu, ext) {
+			return true
+		}
+	}
+	return false
 }
