@@ -117,6 +117,22 @@ func TestFilterEntries(t *testing.T) {
 	}
 }
 
+func TestFilterEntriesIgnoresStatic(t *testing.T) {
+	entries := []Entry{
+		{Request: Request{URL: "https://example.com/app.js"}},
+		{Request: Request{URL: "https://example.com/style.css"}},
+		{Request: Request{URL: "https://example.com/image.png"}},
+		{Request: Request{URL: "https://example.com/_next/static/chunk.js"}},
+		{Request: Request{URL: "https://example.com/fonts/font.woff2"}},
+		{Request: Request{URL: "https://example.com/index.html"}},
+		{Request: Request{URL: "https://example.com/api/v1/users"}},
+	}
+	got := filterEntries(entries, nil)
+	if len(got) != 1 || !strings.Contains(got[0].Request.URL, "/api/") {
+		t.Fatalf("expected only API request to remain, got: %#v", got)
+	}
+}
+
 func TestGenerateHTTPFile(t *testing.T) {
 	entries := []Entry{
 		{Request: Request{

@@ -30,6 +30,7 @@ func main() {
 	reportFormat := flag.String("report", "console", "Report format: console, html, csv, json")
 	reportOutput := flag.String("output", "results", "Output directory for results and reports")
 	reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
+	verbose := flag.Bool("v", false, "Verbose mode: print request result JSON for each request")
 
 	flag.Parse()
 
@@ -91,6 +92,9 @@ func main() {
 		fmt.Printf("Error creating streaming runner: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Set verbose flag
+	r.SetVerbose(*verbose)
 
 	// Generate appropriate report based on detail level
 	var reportContent string

@@ -31,6 +31,7 @@ type Runner struct {
 	StreamingCollector *streaming.StreamingCollector
 	OutputDir          string
 	MetricsCollector   *metrics.MetricsCollector
+	Verbose            bool
 	// Categorized requests by lifecycle
 	beforeUserRequests        []chttp.Request
 	beforeIterationRequests   []chttp.Request
@@ -86,6 +87,11 @@ func NewRunnerWithEnvFile(concurrency, iterations, runtime, delay int, requests 
 
 	runner.categorizeRequests()
 	return runner, nil
+}
+
+// SetVerbose enables or disables verbose mode
+func (r *Runner) SetVerbose(verbose bool) {
+	r.Verbose = verbose
 }
 
 // Run executes requests with file streaming to reduce memory usage
@@ -573,6 +579,26 @@ func (r *Runner) execute(req chttp.Request, te *template.Engine, virtualUserId, 
 	} else {
 		result.Success = true
 		fmt.Printf("%s [%s] [%s] URL: %s, Duration: %v\n", time.Now().Format("2006-01-02 15:04:05"), resp.Status, requestName, renderedURL, duration)
+	}
+
+	// Print verbose JSON output if enabled
+	if r.Verbose {
+		resultJSON, err := json.MarshalIndent(map[string]interface{}{
+			"name":          result.Name,
+			"verb":          result.Verb,
+			"url":           result.URL,
+			"timestamp":     result.Timestamp.Format(time.RFC3339),
+			"virtualUserId": virtualUserId,
+			"iterationId":   iterationID,
+			"statusCode":    result.StatusCode,
+			"responseTime":  duration.Milliseconds(),
+			"success":       result.Success,
+			"error":         result.Error,
+			"responseBody":  responseBody,
+		}, "", "  ")
+		if err == nil {
+			fmt.Printf("\n=== Request Result JSON ===\n%s\n===========================\n\n", string(resultJSON))
+		}
 	}
 
 	// Record HTTP request metrics
