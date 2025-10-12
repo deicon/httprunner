@@ -45,7 +45,7 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*types.Rep
 		CheckSummaries:           make(map[string]types.CheckSummary),
 		RequestDetails:           make([]types.RequestResult, 0),
 		StartTime:                startTime,
-		EndTime:                  time.Now(),
+		EndTime:                  time.Time{},
 		MinResponseTime:          time.Hour, // Initialize to high value
 		MaxResponseTime:          0,
 		MetricsSummaries:         make(map[string]metrics.MetricSummary),
@@ -53,6 +53,12 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*types.Rep
 
 	scanner := bufio.NewScanner(file)
 	var totalResponseTime time.Duration
+	// Track first/last timestamps and durations to compute offline metrics
+	var firstTimestamp time.Time
+	var lastTimestamp time.Time
+	durationsMs := make([]float64, 0, 1024)
+	// Track unique virtual users
+	vus := make(map[int]struct{})
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -69,6 +75,9 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*types.Rep
 		report.TotalRequests++
 		totalResponseTime += result.ResponseTime
 
+		// Track VU set
+		vus[result.VirtualUserID] = struct{}{}
+
 		if result.Success {
 			report.SuccessfulRequests++
 		} else {
@@ -77,6 +86,17 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*types.Rep
 				report.ErrorBreakdown[result.Error]++
 			}
 		}
+
+		// Track timestamps for runtime
+		if firstTimestamp.IsZero() || result.Timestamp.Before(firstTimestamp) {
+			firstTimestamp = result.Timestamp
+		}
+		if lastTimestamp.IsZero() || result.Timestamp.After(lastTimestamp) {
+			lastTimestamp = result.Timestamp
+		}
+
+		// Collect durations (ms) for trend metrics
+		durationsMs = append(durationsMs, float64(result.ResponseTime.Milliseconds()))
 
 		// Update min/max response times
 		if result.ResponseTime < report.MinResponseTime {
@@ -153,6 +173,93 @@ func (fr *FileReporter) generateReportStreaming(startTime time.Time) (*types.Rep
 		report.MinResponseTime = 0
 	}
 
+	// Derive start/end time and runtime if possible
+	if !firstTimestamp.IsZero() {
+		// Prefer provided startTime if non-zero, otherwise infer from first record
+		if !startTime.IsZero() {
+			report.StartTime = startTime
+		} else {
+			report.StartTime = firstTimestamp
+		}
+		// End at last observed timestamp
+		report.EndTime = lastTimestamp
+		if report.EndTime.After(report.StartTime) {
+			report.RuntimeSeconds = report.EndTime.Sub(report.StartTime).Seconds()
+		}
+	}
+
+	// Derive total virtual users from observed results
+	report.TotalVirtualUsers = len(vus)
+
+	// Populate key metrics summaries for offline reports
+	if report.MetricsSummaries == nil {
+		report.MetricsSummaries = make(map[string]metrics.MetricSummary)
+	}
+
+	// http_reqs counter with rate
+	if report.TotalRequests > 0 {
+		httpReqs := metrics.MetricSummary{
+			Name:  "http_reqs",
+			Type:  metrics.Counter,
+			Count: report.TotalRequests,
+			Sum:   float64(report.TotalRequests),
+		}
+		if report.RuntimeSeconds > 0 {
+			httpReqs.Rate = httpReqs.Sum / report.RuntimeSeconds
+			httpReqs.RateUnit = "req/s"
+		}
+		report.MetricsSummaries["http_reqs"] = httpReqs
+	}
+
+	// http_req_failed rate (average failure ratio)
+	if report.TotalRequests > 0 {
+		httpReqFailed := metrics.MetricSummary{
+			Name:    "http_req_failed",
+			Type:    metrics.Rate,
+			Count:   report.TotalRequests,
+			Sum:     float64(report.FailedRequests),
+			Average: float64(report.FailedRequests) / float64(report.TotalRequests),
+		}
+		report.MetricsSummaries["http_req_failed"] = httpReqFailed
+	}
+
+	// http_req_duration trend (ms)
+	if len(durationsMs) > 0 {
+		// Compute stats
+		sort.Float64s(durationsMs)
+		var sum float64
+		for _, v := range durationsMs {
+			sum += v
+		}
+		count := len(durationsMs)
+		durationSummary := metrics.MetricSummary{
+			Name:    "http_req_duration",
+			Type:    metrics.Trend,
+			Count:   count,
+			Sum:     sum,
+			Average: sum / float64(count),
+			Min:     durationsMs[0],
+			Max:     durationsMs[count-1],
+			P50:     percentile(durationsMs, 50),
+			P90:     percentile(durationsMs, 90),
+			P95:     percentile(durationsMs, 95),
+			P99:     percentile(durationsMs, 99),
+		}
+		report.MetricsSummaries["http_req_duration"] = durationSummary
+	}
+
+	// checks rate (average success ratio)
+	if report.TotalChecks > 0 {
+		checks := metrics.MetricSummary{
+			Name:    "checks",
+			Type:    metrics.Rate,
+			Count:   report.TotalChecks,
+			Sum:     float64(report.SuccessfulChecks),
+			Average: float64(report.SuccessfulChecks) / float64(report.TotalChecks),
+		}
+		report.MetricsSummaries["checks"] = checks
+	}
+
 	return report, nil
 }
 
@@ -171,6 +278,9 @@ func (fr *FileReporter) generateHierarchicalReportStreaming(startTime time.Time)
 
 	// Build summary report from collected data
 	summaryReport := fr.buildSummaryFromData(summaryData, startTime)
+
+	// Enrich summary with runtime and key metrics derived from request details
+	fr.enrichSummaryWithOfflineMetrics(&summaryReport)
 
 	// Build hierarchical report from goroutine data
 	hierarchical := &types.HierarchicalReport{
@@ -425,6 +535,123 @@ func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime tim
 	}
 
 	return report
+}
+
+// enrichSummaryWithOfflineMetrics computes Start/End/Runtime and key metric summaries
+// from the report's RequestDetails, for use when generating reports from raw results.
+func (fr *FileReporter) enrichSummaryWithOfflineMetrics(report *types.Report) {
+	if len(report.RequestDetails) == 0 {
+		return
+	}
+	// Infer start/end from timestamps if available
+	var firstTS time.Time
+	var lastTS time.Time
+	durations := make([]float64, 0, len(report.RequestDetails))
+	for _, r := range report.RequestDetails {
+		if firstTS.IsZero() || r.Timestamp.Before(firstTS) {
+			firstTS = r.Timestamp
+		}
+		if lastTS.IsZero() || r.Timestamp.After(lastTS) {
+			lastTS = r.Timestamp
+		}
+		durations = append(durations, float64(r.ResponseTime.Milliseconds()))
+	}
+	if report.StartTime.IsZero() {
+		report.StartTime = firstTS
+	}
+	if !lastTS.IsZero() {
+		report.EndTime = lastTS
+	}
+	if report.EndTime.After(report.StartTime) {
+		report.RuntimeSeconds = report.EndTime.Sub(report.StartTime).Seconds()
+	}
+
+	if report.MetricsSummaries == nil {
+		report.MetricsSummaries = make(map[string]metrics.MetricSummary)
+	}
+
+	// http_reqs
+	if report.TotalRequests > 0 {
+		httpReqs := metrics.MetricSummary{
+			Name:  "http_reqs",
+			Type:  metrics.Counter,
+			Count: report.TotalRequests,
+			Sum:   float64(report.TotalRequests),
+		}
+		if report.RuntimeSeconds > 0 {
+			httpReqs.Rate = httpReqs.Sum / report.RuntimeSeconds
+			httpReqs.RateUnit = "req/s"
+		}
+		report.MetricsSummaries["http_reqs"] = httpReqs
+	}
+
+	// http_req_failed
+	if report.TotalRequests > 0 {
+		httpReqFailed := metrics.MetricSummary{
+			Name:    "http_req_failed",
+			Type:    metrics.Rate,
+			Count:   report.TotalRequests,
+			Sum:     float64(report.FailedRequests),
+			Average: float64(report.FailedRequests) / float64(report.TotalRequests),
+		}
+		report.MetricsSummaries["http_req_failed"] = httpReqFailed
+	}
+
+	// http_req_duration
+	if len(durations) > 0 {
+		sort.Float64s(durations)
+		var sum float64
+		for _, v := range durations {
+			sum += v
+		}
+		count := len(durations)
+		report.MetricsSummaries["http_req_duration"] = metrics.MetricSummary{
+			Name:    "http_req_duration",
+			Type:    metrics.Trend,
+			Count:   count,
+			Sum:     sum,
+			Average: sum / float64(count),
+			Min:     durations[0],
+			Max:     durations[count-1],
+			P50:     percentile(durations, 50),
+			P90:     percentile(durations, 90),
+			P95:     percentile(durations, 95),
+			P99:     percentile(durations, 99),
+		}
+	}
+
+	// checks
+	if report.TotalChecks > 0 {
+		report.MetricsSummaries["checks"] = metrics.MetricSummary{
+			Name:    "checks",
+			Type:    metrics.Rate,
+			Count:   report.TotalChecks,
+			Sum:     float64(report.SuccessfulChecks),
+			Average: float64(report.SuccessfulChecks) / float64(report.TotalChecks),
+		}
+	}
+}
+
+// percentile calculates an approximate percentile value from a sorted slice
+func percentile(sorted []float64, p float64) float64 {
+	if len(sorted) == 0 {
+		return 0
+	}
+	// Clamp p
+	if p < 0 {
+		p = 0
+	}
+	if p > 100 {
+		p = 100
+	}
+	idx := int(p / 100.0 * float64(len(sorted)-1))
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(sorted) {
+		idx = len(sorted) - 1
+	}
+	return sorted[idx]
 }
 
 // buildGoroutineReportFromDataWithResults builds a goroutine report from collected data including request results

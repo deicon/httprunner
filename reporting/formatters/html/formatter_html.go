@@ -18,8 +18,15 @@ var htmlTemplate string
 
 func (f *HTMLFormatter) Format(report *types.Report) (string, error) {
 	tmpl, err := template.New("report").Funcs(template.FuncMap{
-		"add":         func(a, b int) int { return a + b },
-		"mul":         func(a, b float64) float64 { return a * b },
+		"add": func(a, b int) int { return a + b },
+		"mul": func(a, b float64) float64 { return a * b },
+		"div": func(a, b float64) float64 {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+		"float64":     func(i int) float64 { return float64(i) },
 		"stripSuffix": func(s, suffix string) string { return strings.TrimSuffix(s, suffix) },
 	}).Parse(htmlTemplate)
 	if err != nil {

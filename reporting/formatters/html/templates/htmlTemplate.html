@@ -23,6 +23,7 @@
     <div class="metric"><strong>Successful:</strong> <span class="success">{{.SuccessfulRequests}}</span></div>
     <div class="metric"><strong>Failed:</strong> <span class="error">{{.FailedRequests}}</span></div>
     <div class="metric"><strong>Success Rate:</strong> {{printf "%.1f" .SuccessRate}}%</div>
+    <div class="metric"><strong>Requests/sec:</strong> {{if gt .RuntimeSeconds 0.0}}{{printf "%.1f" (div (float64 .TotalRequests) .RuntimeSeconds)}}{{else}}-{{end}}</div>
 </div>
 
 <div class="summary">

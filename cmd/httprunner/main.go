@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/deicon/httprunner/parser"
 	"github.com/deicon/httprunner/reporting"
@@ -31,6 +32,7 @@ func main() {
 	reportOutput := flag.String("output", "results", "Output directory for results and reports")
 	reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
 	verbose := flag.Bool("v", false, "Verbose mode: print request result JSON for each request")
+	rawFile := flag.String("raw", "", "Path to raw results .jsonl file to generate report without executing")
 
 	flag.Parse()
 
@@ -39,19 +41,23 @@ func main() {
 		return
 	}
 
-	if *requestFile == "" {
-		fmt.Println("Error: -f flag is required")
+	// Offline reporting mode: when -raw is provided, skip execution
+	offlineMode := *rawFile != ""
+	if !offlineMode && *requestFile == "" {
+		fmt.Println("Error: -f flag is required (or provide -raw to read a raw results file)")
 		os.Exit(1)
 	}
 
-	// Validate runtime vs iterations parameters
-	if *runtime < 0 {
-		fmt.Println("Error: runtime (-r) must be 0 or positive")
-		os.Exit(1)
-	}
-	if *iterations < 1 {
-		fmt.Println("Error: iterations (-i) must be positive")
-		os.Exit(1)
+	// Validate runtime vs iterations parameters (only for execution mode)
+	if !offlineMode {
+		if *runtime < 0 {
+			fmt.Println("Error: runtime (-r) must be 0 or positive")
+			os.Exit(1)
+		}
+		if *iterations < 1 {
+			fmt.Println("Error: iterations (-i) must be positive")
+			os.Exit(1)
+		}
 	}
 
 	// Validate report format
@@ -72,6 +78,73 @@ func main() {
 	default:
 		fmt.Printf("Error: Invalid report detail level '%s'. Valid levels: summary, goroutine, iteration, full\n", *reportDetail)
 		os.Exit(1)
+	}
+
+	// If offline mode, build report from raw file and exit
+	if offlineMode {
+		// Build a FileReporter on the provided raw file
+		fr := reporting.NewFileReporter(*rawFile)
+
+		var reportContent string
+		var err error
+
+		if detailLevel == types.DetailSummary {
+			rep, genErr := fr.GenerateReport(time.Time{}) // let reporter derive start/end times
+			if genErr != nil {
+				fmt.Printf("Error generating report from raw file: %v\n", genErr)
+				os.Exit(1)
+			}
+			formatter := reporting.GetFormatter(types.ReportFormat(strings.ToLower(*reportFormat)))
+			reportContent, err = formatter.Format(rep)
+		} else {
+			hr, genErr := fr.GenerateHierarchicalReport(time.Time{})
+			if genErr != nil {
+				fmt.Printf("Error generating hierarchical report from raw file: %v\n", genErr)
+				os.Exit(1)
+			}
+			hierarchicalFormatter := &hierarchical.HierarchicalFormatter{
+				DetailLevel: detailLevel,
+				Format:      types.ReportFormat(strings.ToLower(*reportFormat)),
+			}
+			reportContent, err = hierarchicalFormatter.FormatHierarchical(hr)
+		}
+
+		if err != nil {
+			fmt.Printf("Error formatting report: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Output handling mirrors execution mode
+		format := types.ReportFormat(strings.ToLower(*reportFormat))
+		if format == types.FormatConsole {
+			fmt.Print(reportContent)
+		} else {
+			// Ensure output directory exists
+			if err := os.MkdirAll(*reportOutput, 0755); err != nil {
+				fmt.Printf("Error ensuring output directory: %v\n", err)
+				os.Exit(1)
+			}
+			filename := filepath.Join(*reportOutput, "report")
+			switch format {
+			case types.FormatHTML:
+				filename += ".html"
+			case types.FormatCSV:
+				filename += ".csv"
+			case types.FormatJSON:
+				filename += ".json"
+			default:
+				filename += ".txt"
+			}
+			if err := os.WriteFile(filename, []byte(reportContent), 0644); err != nil {
+				fmt.Printf("Error writing report to file: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("\nFormatted report saved to: %s\n", filename)
+		}
+
+		// In offline mode, also echo the raw file path for convenience
+		fmt.Printf("Raw results used: %s\n", *rawFile)
+		return
 	}
 
 	requests, err := parser.Parse(*requestFile)
