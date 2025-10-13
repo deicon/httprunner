@@ -34,7 +34,7 @@ func (f *HierarchicalFormatter) FormatHierarchical(report *types.HierarchicalRep
 }
 
 func (f *HierarchicalFormatter) formatHierarchicalConsole(report *types.HierarchicalReport) (string, error) {
-	var buf bytes.Buffer
+    var buf bytes.Buffer
 
 	// Always show summary
 	buf.WriteString("HTTP Request Report - Summary\n")
@@ -57,8 +57,27 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *types.Hierarch
 		buf.WriteString(fmt.Sprintf("Request Success Rate: %.1f%%\n", successRate))
 	}
 
-	buf.WriteString(fmt.Sprintf("Average Response Time: %v\n", report.Summary.AverageResponseTime))
-	buf.WriteString(fmt.Sprintf("Total Duration: %v\n\n", report.Summary.EndTime.Sub(report.Summary.StartTime)))
+    buf.WriteString(fmt.Sprintf("Average Response Time: %v\n", report.Summary.AverageResponseTime))
+    buf.WriteString(fmt.Sprintf("Total Duration: %v\n\n", report.Summary.EndTime.Sub(report.Summary.StartTime)))
+
+    // Top longest requests (from summary)
+    if len(report.Summary.TopLongestRequests) > 0 {
+        buf.WriteString("Top 5 Longest Requests:\n")
+        limit := 5
+        if len(report.Summary.TopLongestRequests) < limit {
+            limit = len(report.Summary.TopLongestRequests)
+        }
+        for i := 0; i < limit; i++ {
+            req := report.Summary.TopLongestRequests[i]
+            status := fmt.Sprintf("%d ✓", req.StatusCode)
+            if !req.Success {
+                status = fmt.Sprintf("ERROR: %s", req.Error)
+            }
+            buf.WriteString(fmt.Sprintf("  %d. %s %s %s  %s  %.3f ms  (VU %d, Iter %d)\n",
+                i+1, req.Verb, req.Name, req.URL, status, float64(req.ResponseTime.Nanoseconds())/1e6, req.VirtualUserID, req.IterationID))
+        }
+        buf.WriteString("\n")
+    }
 
 	// Check results summary
 	if len(report.Summary.CheckSummaries) > 0 {
@@ -244,21 +263,22 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *types.Hierarch
 }
 
 func (f *HierarchicalFormatter) formatHierarchicalJSON(report *types.HierarchicalReport) (string, error) {
-	// Create structured JSON based on detail level
-	output := map[string]interface{}{
-		"summary": map[string]interface{}{
-			"totalGoroutines":      report.TotalVirtualUsers,
-			"successfulGoroutines": report.SuccessfulVirtualUsers,
-			"failedGoroutines":     report.FailedVirtualUsers,
-			"totalRequests":        report.Summary.TotalRequests,
-			"successfulRequests":   report.Summary.SuccessfulRequests,
-			"failedRequests":       report.Summary.FailedRequests,
-			"averageResponseTime":  report.Summary.AverageResponseTime.String(),
-			"totalDuration":        report.Summary.EndTime.Sub(report.Summary.StartTime).String(),
-			"startTime":            report.Summary.StartTime.Format(time.RFC3339),
-			"endTime":              report.Summary.EndTime.Format(time.RFC3339),
-		},
-	}
+    // Create structured JSON based on detail level
+    output := map[string]interface{}{
+        "summary": map[string]interface{}{
+            "totalGoroutines":      report.TotalVirtualUsers,
+            "successfulGoroutines": report.SuccessfulVirtualUsers,
+            "failedGoroutines":     report.FailedVirtualUsers,
+            "totalRequests":        report.Summary.TotalRequests,
+            "successfulRequests":   report.Summary.SuccessfulRequests,
+            "failedRequests":       report.Summary.FailedRequests,
+            "averageResponseTime":  report.Summary.AverageResponseTime.String(),
+            "totalDuration":        report.Summary.EndTime.Sub(report.Summary.StartTime).String(),
+            "startTime":            report.Summary.StartTime.Format(time.RFC3339),
+            "endTime":              report.Summary.EndTime.Format(time.RFC3339),
+            "topLongestRequests":   report.Summary.TopLongestRequests,
+        },
+    }
 
 	if f.DetailLevel == types.DetailVirtualuser || f.DetailLevel == types.DetailIteration || f.DetailLevel == types.DetailFull {
 		goroutines := make([]map[string]interface{}, 0, len(report.VirtualUserReports))

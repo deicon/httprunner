@@ -39,6 +39,28 @@
     {{end}}
 </div>
 
+{{if .TopLongestRequests}}
+<div class="summary">
+    <h3>⏱️ Top 5 Longest Requests</h3>
+    <table style="margin-bottom: 10px;">
+        <tr><th>#</th><th>Method</th><th>Name</th><th>URL</th><th>Status</th><th>Time</th><th>VU</th><th>Iter</th></tr>
+        {{range $i, $req := .TopLongestRequests}}
+        <tr>
+            <td>{{add $i 1}}</td>
+            <td>{{$req.Verb}}</td>
+            <td>{{$req.Name}}</td>
+            <td>{{$req.URL}}</td>
+            <td>{{if $req.Success}}<span class="success">{{$req.StatusCode}} ✓</span>{{else}}<span class="error">{{$req.StatusCode}} ✗</span>{{end}}</td>
+            <td>{{$req.ResponseTime}}</td>
+            <td>{{$req.VirtualUserID}}</td>
+            <td>{{$req.IterationID}}</td>
+        </tr>
+        {{end}}
+    </table>
+    <small>Tip: Use the hierarchical HTML report for direct links to iterations.</small>
+  </div>
+{{end}}
+
 {{if .ResponseTimeDistribution}}
 <div class="chart">
     <div class="distribution">
@@ -198,7 +220,7 @@
         <th>Timestamp</th>
     </tr>
     {{range $index, $req := .RequestDetails}}
-    <tr>
+    <tr id="req-vu-{{$req.VirtualUserID}}-iter-{{$req.IterationID}}-{{$index}}">
         <td>{{add $index 1}}</td>
         <td>{{$req.Name}}</td>
         <td>{{$req.Verb}}</td>

@@ -41,6 +41,25 @@ func (f *ConsoleFormatter) Format(report *types.Report) (string, error) {
 	buf.WriteString(fmt.Sprintf("Maximum Response Time: %v\n", report.MaxResponseTime))
 	buf.WriteString(fmt.Sprintf("Total Duration: %v\n\n", report.EndTime.Sub(report.StartTime)))
 
+	// Top longest requests
+	if len(report.TopLongestRequests) > 0 {
+		buf.WriteString("Top 5 Longest Requests:\n")
+		limit := 5
+		if len(report.TopLongestRequests) < limit {
+			limit = len(report.TopLongestRequests)
+		}
+		for i := 0; i < limit; i++ {
+			req := report.TopLongestRequests[i]
+			status := fmt.Sprintf("%d ✓", req.StatusCode)
+			if !req.Success {
+				status = fmt.Sprintf("ERROR: %s", req.Error)
+			}
+			buf.WriteString(fmt.Sprintf("  %d. %s %s %s  %s  %.3f ms  (VU %d, Iter %d)\n",
+				i+1, req.Verb, req.Name, req.URL, status, float64(req.ResponseTime.Nanoseconds())/1e6, req.VirtualUserID, req.IterationID))
+		}
+		buf.WriteString("\n")
+	}
+
 	// Response time distribution
 	if len(report.ResponseTimeDistribution) > 0 {
 		buf.WriteString("Response Time Distribution:\n")

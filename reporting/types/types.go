@@ -40,20 +40,23 @@ type RequestResult struct {
 
 // Report contains aggregated statistics from all request executions
 type Report struct {
-	TotalRequests            int
-	SuccessfulRequests       int
-	FailedRequests           int
-	AverageResponseTime      time.Duration
-	MinResponseTime          time.Duration
-	MaxResponseTime          time.Duration
-	ResponseTimeDistribution map[string]int
-	ErrorBreakdown           map[string]int
-	RequestDetails           []RequestResult
-	StartTime                time.Time
-	EndTime                  time.Time
-	CheckSummaries           map[string]CheckSummary
-	TotalChecks              int
-	SuccessfulChecks         int
+    TotalRequests            int
+    SuccessfulRequests       int
+    FailedRequests           int
+    AverageResponseTime      time.Duration
+    MinResponseTime          time.Duration
+    MaxResponseTime          time.Duration
+    ResponseTimeDistribution map[string]int
+    ErrorBreakdown           map[string]int
+    RequestDetails           []RequestResult
+    // TopLongestRequests contains the top N requests by ResponseTime (descending)
+    // This helps identify the longest-running calls quickly in reports.
+    TopLongestRequests       []RequestResult
+    StartTime                time.Time
+    EndTime                  time.Time
+    CheckSummaries           map[string]CheckSummary
+    TotalChecks              int
+    SuccessfulChecks         int
 	FailedChecks             int
 	MetricsSummaries         map[string]metrics.MetricSummary
 	TotalVirtualUsers        int
