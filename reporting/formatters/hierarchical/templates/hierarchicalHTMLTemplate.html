@@ -243,6 +243,26 @@
 </div>
 </div>
 
+{{if .Summary.TopLongestRequests}}
+<div class="summary">
+    <h2>⏱️ Top 5 Longest Requests</h2>
+    <table>
+        <tr><th>#</th><th>Method</th><th>Name</th><th>URL</th><th>Status</th><th>Time</th><th>Iteration</th></tr>
+        {{range $i, $req := .Summary.TopLongestRequests}}
+        <tr>
+            <td>{{add $i 1}}</td>
+            <td>{{$req.Verb}}</td>
+            <td>{{$req.Name}}</td>
+            <td class="url" title="{{$req.URL}}">{{$req.URL}}</td>
+            <td>{{if $req.Success}}<span class="success">{{$req.StatusCode}} ✓</span>{{else}}<span class="error">{{$req.StatusCode}} ✗</span>{{end}}</td>
+            <td>{{$req.ResponseTime}}</td>
+            <td><a href="#iter-vu-{{$req.VirtualUserID}}-{{$req.IterationID}}">VU {{$req.VirtualUserID}}, Iter {{$req.IterationID}}</a></td>
+        </tr>
+        {{end}}
+    </table>
+</div>
+{{end}}
+
 {{if gt .Summary.TotalChecks 0}}
 <div class="summary">
     <h2>✅ Check Results</h2>
@@ -322,7 +342,7 @@
         </button>
         <div class="content">
             {{range $iterationIndex, $iteration := $goroutine.Iterations}}
-            <div class="iteration-header">
+            <div class="iteration-header" id="iter-vu-{{$goroutine.GoroutineID}}-{{$iteration.IterationID}}">
                 <strong>Iteration {{$iteration.IterationID}}</strong>
                 - {{$iteration.TotalRequests}} requests
                 - {{if gt $iteration.TotalRequests 0}}{{printf "%.1f" (mul (div (float64 $iteration.SuccessfulRequests) (float64 $iteration.TotalRequests)) 100.0)}}%{{else}}0%{{end}} success
