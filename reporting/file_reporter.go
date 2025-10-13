@@ -527,24 +527,24 @@ func (fr *FileReporter) updateGoroutineData(goroutines map[int]*goroutineData, r
 
 // buildSummaryFromData builds a summary report from collected data
 func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime time.Time) types.Report {
-    report := types.Report{
-        TotalRequests:            summary.totalRequests,
-        SuccessfulRequests:       summary.successfulRequests,
-        FailedRequests:           summary.failedRequests,
-        MinResponseTime:          summary.minResponseTime,
-        MaxResponseTime:          summary.maxResponseTime,
-        ResponseTimeDistribution: summary.responseTimeDistribution,
-        ErrorBreakdown:           summary.errorBreakdown,
-        CheckSummaries:           summary.checkSummaries,
-        TotalChecks:              summary.totalChecks,
-        SuccessfulChecks:         summary.successfulChecks,
-        FailedChecks:             summary.failedChecks,
-        RequestDetails:           summary.requestDetails,
-        TopLongestRequests:       make([]types.RequestResult, 0),
-        StartTime:                startTime,
-        EndTime:                  time.Now(),
-        MetricsSummaries:         make(map[string]metrics.MetricSummary),
-    }
+	report := types.Report{
+		TotalRequests:            summary.totalRequests,
+		SuccessfulRequests:       summary.successfulRequests,
+		FailedRequests:           summary.failedRequests,
+		MinResponseTime:          summary.minResponseTime,
+		MaxResponseTime:          summary.maxResponseTime,
+		ResponseTimeDistribution: summary.responseTimeDistribution,
+		ErrorBreakdown:           summary.errorBreakdown,
+		CheckSummaries:           summary.checkSummaries,
+		TotalChecks:              summary.totalChecks,
+		SuccessfulChecks:         summary.successfulChecks,
+		FailedChecks:             summary.failedChecks,
+		RequestDetails:           summary.requestDetails,
+		TopLongestRequests:       make([]types.RequestResult, 0),
+		StartTime:                startTime,
+		EndTime:                  time.Now(),
+		MetricsSummaries:         make(map[string]metrics.MetricSummary),
+	}
 
 	// Calculate average response time
 	if report.TotalRequests > 0 {
@@ -557,9 +557,9 @@ func (fr *FileReporter) buildSummaryFromData(summary *summaryData, startTime tim
 // enrichSummaryWithOfflineMetrics computes Start/End/Runtime and key metric summaries
 // from the report's RequestDetails, for use when generating reports from raw results.
 func (fr *FileReporter) enrichSummaryWithOfflineMetrics(report *types.Report) {
-    if len(report.RequestDetails) == 0 {
-        return
-    }
+	if len(report.RequestDetails) == 0 {
+		return
+	}
 	// Infer start/end from timestamps if available
 	var firstTS time.Time
 	var lastTS time.Time
@@ -583,9 +583,9 @@ func (fr *FileReporter) enrichSummaryWithOfflineMetrics(report *types.Report) {
 		report.RuntimeSeconds = report.EndTime.Sub(report.StartTime).Seconds()
 	}
 
-    if report.MetricsSummaries == nil {
-        report.MetricsSummaries = make(map[string]metrics.MetricSummary)
-    }
+	if report.MetricsSummaries == nil {
+		report.MetricsSummaries = make(map[string]metrics.MetricSummary)
+	}
 
 	// http_reqs
 	if report.TotalRequests > 0 {
@@ -638,15 +638,15 @@ func (fr *FileReporter) enrichSummaryWithOfflineMetrics(report *types.Report) {
 	}
 
 	// checks
-    if report.TotalChecks > 0 {
-        report.MetricsSummaries["checks"] = metrics.MetricSummary{
-            Name:    "checks",
-            Type:    metrics.Rate,
-            Count:   report.TotalChecks,
-            Sum:     float64(report.SuccessfulChecks),
-            Average: float64(report.SuccessfulChecks) / float64(report.TotalChecks),
-        }
-    }
+	if report.TotalChecks > 0 {
+		report.MetricsSummaries["checks"] = metrics.MetricSummary{
+			Name:    "checks",
+			Type:    metrics.Rate,
+			Count:   report.TotalChecks,
+			Sum:     float64(report.SuccessfulChecks),
+			Average: float64(report.SuccessfulChecks) / float64(report.TotalChecks),
+		}
+	}
 
 	// Compute Top 5 Longest Requests by ResponseTime
 	if len(report.RequestDetails) > 0 {
