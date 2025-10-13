@@ -155,6 +155,11 @@ func (f *HierarchicalFormatter) formatHierarchicalConsole(report *types.Hierarch
 			buf.WriteString("Rates:\n")
 			for name, summary := range rates {
 				rate := summary.Average * 100 // Convert to percentage
+				// For http_req_failed, show number of failed requests (sum of 1/0 values)
+				if name == "http_req_failed" {
+					buf.WriteString(fmt.Sprintf("  %-25s %.2f%%  (count: %d)\n", name, rate, int(summary.Sum)))
+					continue
+				}
 				buf.WriteString(fmt.Sprintf("  %-25s %.2f%%  (count: %d)\n", name, rate, summary.Count))
 			}
 			buf.WriteString("\n")
