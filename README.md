@@ -77,6 +77,7 @@ github.com/deicon/httprunner/
 - `-i n`: Number of iterations (default: 1)  
 - `-r n`: Runtime in seconds. Overwrites iterations
 - `-d n`: Delay between iterations in milliseconds (default: 0)
+- `-offset n`: Max random startup delay between virtual users in milliseconds (default: 0)
 - `-f filename`: .http file containing HTTP requests (required)
 - `-e filename`: .env file containing environment variables (optional)
 

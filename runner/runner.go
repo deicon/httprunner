@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	nethttp "net/http"
 	"net/http/httptrace"
 	"sync"
@@ -22,10 +23,14 @@ import (
 
 // Runner executes HTTP requests
 type Runner struct {
-	Concurrency        int
-	Iterations         int
-	Runtime            int // Runtime in seconds (0 means use iterations)
-	Delay              int
+	Concurrency int
+	Iterations  int
+	Runtime     int // Runtime in seconds (0 means use iterations)
+	Delay       int
+	// StartupOffset defines the max random delay (ms)
+	// between starting consecutive virtual users.
+	// If 0, all VUs start immediately.
+	StartupOffset      int
 	Requests           []chttp.Request
 	envFile            string
 	StreamingCollector *streaming.StreamingCollector
@@ -296,6 +301,14 @@ func (r *Runner) executeWithStreaming() error {
 				}
 			}
 		}(i)
+
+		// If configured, wait a random time before starting the next VU
+		if r.StartupOffset > 0 && i < r.Concurrency-1 {
+			// Use a local RNG to avoid touching the global source
+			rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+			sleepMs := rng.Intn(r.StartupOffset + 1) // [0, StartupOffset]
+			time.Sleep(time.Duration(sleepMs) * time.Millisecond)
+		}
 	}
 
 	// Stream results to file in a separate goroutine
