@@ -26,6 +26,7 @@ func main() {
 	iterations := flag.Int("i", 1, "Number of iterations")
 	runtime := flag.Int("r", 0, "Runtime duration in seconds (0 means use iterations)")
 	delay := flag.Int("d", 0, "Delay between iterations in milliseconds")
+	offset := flag.Int("offset", 0, "Max random startup delay per VU in milliseconds")
 	requestFile := flag.String("f", "", ".http file containing http requests")
 	envFile := flag.String("e", "", ".env file containing environment variables")
 	reportFormat := flag.String("report", "console", "Report format: console, html, csv, json")
@@ -168,6 +169,8 @@ func main() {
 
 	// Set verbose flag
 	r.SetVerbose(*verbose)
+	// Apply startup offset between VU spawns, if provided
+	r.StartupOffset = *offset
 
 	// Generate appropriate report based on detail level
 	var reportContent string

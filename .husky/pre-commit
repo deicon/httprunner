@@ -18,6 +18,6 @@ if [ $? -ne 0 ]; then
 fi
 
 # Add any changes made by fmt back to the staging area
-git add $STAGED_GO_FILES
+git add .
 
 echo "Pre-commit hooks completed successfully"
