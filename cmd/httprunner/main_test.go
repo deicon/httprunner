@@ -150,3 +150,31 @@ func TestRunnerExitsOnInvalidDetailLevel(t *testing.T) {
 		t.Fatalf("expected invalid detail message; got: %s", string(out))
 	}
 }
+
+func TestOfflineCSVShortcutPrintsToStdout(t *testing.T) {
+    dir := t.TempDir()
+    // Write minimal JSONL with a single RequestResult
+    jsonl := `{"Name":"Req1","Verb":"GET","URL":"http://example.com","StatusCode":200,"ResponseTime":100000000,"Success":true,"Error":"","Timestamp":"2024-01-01T00:00:00Z","VirtualUserID":1,"IterationID":1,"Checks":[]}`
+    p := filepath.Join(dir, "results.jsonl")
+    if err := os.WriteFile(p, []byte(jsonl+"\n"), 0644); err != nil {
+        t.Fatalf("write jsonl: %v", err)
+    }
+
+    // Isolate flags
+    oldFS := flag.CommandLine
+    flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+    flag.CommandLine.SetOutput(new(strings.Builder))
+    defer func() { flag.CommandLine = oldFS }()
+
+    oldArgs := os.Args
+    os.Args = []string{"httprunner", "-raw", p, "-csv"}
+    defer func() { os.Args = oldArgs }()
+
+    out := captureStdout(func() { main() })
+    if !strings.Contains(out, "Index,Name,Method,URL,Success,StatusCode,ResponseTime,Error,CheckFailures,Timestamp") {
+        t.Fatalf("expected CSV header in output; got:\n%s", out)
+    }
+    if !strings.Contains(out, "Req1") {
+        t.Fatalf("expected CSV row with request name; got:\n%s", out)
+    }
+}

@@ -19,9 +19,9 @@ import (
 var version = "dev"
 
 func main() {
-	// Command line flags
-	showVersion := flag.Bool("version", false, "Print version and exit")
-	flag.BoolVar(showVersion, "V", false, "Print version and exit")
+    // Command line flags
+    showVersion := flag.Bool("version", false, "Print version and exit")
+    flag.BoolVar(showVersion, "V", false, "Print version and exit")
 	concurrency := flag.Int("u", 1, "Number of parallel virtual parallel users")
 	iterations := flag.Int("i", 1, "Number of iterations")
 	runtime := flag.Int("r", 0, "Runtime duration in seconds (0 means use iterations)")
@@ -29,11 +29,12 @@ func main() {
 	offset := flag.Int("offset", 0, "Max random startup delay per VU in milliseconds")
 	requestFile := flag.String("f", "", ".http file containing http requests")
 	envFile := flag.String("e", "", ".env file containing environment variables")
-	reportFormat := flag.String("report", "console", "Report format: console, html, csv, json")
-	reportOutput := flag.String("output", "results", "Output directory for results and reports")
-	reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
-	verbose := flag.Bool("v", false, "Verbose mode: print request result JSON for each request")
-	rawFile := flag.String("raw", "", "Path to raw results .jsonl file to generate report without executing")
+    reportFormat := flag.String("report", "console", "Report format: console, html, csv, json")
+    reportOutput := flag.String("output", "results", "Output directory for results and reports")
+    reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
+    verbose := flag.Bool("v", false, "Verbose mode: print request result JSON for each request")
+    rawFile := flag.String("raw", "", "Path to raw results .jsonl file to generate report without executing")
+    csvShortcut := flag.Bool("csv", false, "Shorthand to output CSV from -raw to stdout (forces -report=csv, -detail=summary)")
 
 	flag.Parse()
 
@@ -42,12 +43,25 @@ func main() {
 		return
 	}
 
-	// Offline reporting mode: when -raw is provided, skip execution
-	offlineMode := *rawFile != ""
-	if !offlineMode && *requestFile == "" {
-		fmt.Println("Error: -f flag is required (or provide -raw to read a raw results file)")
-		os.Exit(1)
-	}
+    // Offline reporting mode: when -raw is provided, skip execution
+    offlineMode := *rawFile != ""
+    if !offlineMode && *requestFile == "" {
+        fmt.Println("Error: -f flag is required (or provide -raw to read a raw results file)")
+        os.Exit(1)
+    }
+
+    // If -csv shorthand is provided, force CSV formatting and summary detail;
+    // also prefer printing to stdout for easy redirection.
+    forceStdout := false
+    if *csvShortcut {
+        *reportFormat = string(types.FormatCSV)
+        *reportDetail = string(types.DetailSummary)
+        forceStdout = true
+        if !offlineMode {
+            fmt.Println("Error: -csv requires -raw to be provided")
+            os.Exit(1)
+        }
+    }
 
 	// Validate runtime vs iterations parameters (only for execution mode)
 	if !offlineMode {
@@ -81,10 +95,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// If offline mode, build report from raw file and exit
-	if offlineMode {
-		// Build a FileReporter on the provided raw file
-		fr := reporting.NewFileReporter(*rawFile)
+    // If offline mode, build report from raw file and exit
+    if offlineMode {
+        // Build a FileReporter on the provided raw file
+        fr := reporting.NewFileReporter(*rawFile)
 
 		var reportContent string
 		var err error
@@ -115,14 +129,14 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Output handling mirrors execution mode
-		format := types.ReportFormat(strings.ToLower(*reportFormat))
-		if format == types.FormatConsole {
-			fmt.Print(reportContent)
-		} else {
-			// Ensure output directory exists
-			if err := os.MkdirAll(*reportOutput, 0755); err != nil {
-				fmt.Printf("Error ensuring output directory: %v\n", err)
+        // Output handling mirrors execution mode
+        format := types.ReportFormat(strings.ToLower(*reportFormat))
+        if format == types.FormatConsole || forceStdout {
+            fmt.Print(reportContent)
+        } else {
+            // Ensure output directory exists
+            if err := os.MkdirAll(*reportOutput, 0755); err != nil {
+                fmt.Printf("Error ensuring output directory: %v\n", err)
 				os.Exit(1)
 			}
 			filename := filepath.Join(*reportOutput, "report")
