@@ -164,8 +164,10 @@ native npm packages. The worker communicates with `httprunner` over stdio, mirro
 supports the same helper surface (`client.global`, checks, assertions, named requests). Node.js must be
 available on `PATH`; if it is missing or crashes, the CLI falls back to reporting an execution error.
 
-To make additional packages available, install them next to your scenario and extend `NODE_PATH`
-before launching `httprunner`. See `examples/external-node-runtime` for a complete walkthrough.
+When the flag is enabled, `httprunner` automatically adds any `node_modules` directories found next
+to the `.http` file (and up to two parent directories) to Node's resolution paths. For custom
+layouts, you can still extend `NODE_PATH` before launching the runner. See
+`examples/external-node-runtime` for a complete walkthrough.
 
 ### Example requests.http
 

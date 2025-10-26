@@ -167,6 +167,8 @@ type Engine struct {
 	// Runtime mode selection and optional Node process
 	runtimeMode RuntimeMode
 	nodeRuntime *nodeRuntime
+	// Additional search paths for resolving Node.js modules
+	nodeRequirePaths []string
 }
 
 // RuntimeMode represents the active JavaScript runtime implementation
@@ -520,6 +522,10 @@ func (te *Engine) executeScriptNode(script string, responseBody string, virtualU
 		}
 	}
 
+	if len(te.nodeRequirePaths) > 0 {
+		request.RequirePaths = append(request.RequirePaths, te.nodeRequirePaths...)
+	}
+
 	handler := func(name string, args []interface{}) (*nodeRequestResponse, error) {
 		request, ok := te.requestFunctions[name]
 		if !ok {
@@ -631,6 +637,11 @@ func (te *Engine) SetMetricsCollector(collector *metrics.MetricsCollector) {
 // SetRuntimeMode switches the engine to the provided JavaScript runtime
 func (te *Engine) SetRuntimeMode(mode RuntimeMode) {
 	te.runtimeMode = mode
+}
+
+// SetNodeRequirePaths configures additional directories for resolving Node.js modules
+func (te *Engine) SetNodeRequirePaths(paths []string) {
+	te.nodeRequirePaths = paths
 }
 
 // Close releases resources associated with the engine

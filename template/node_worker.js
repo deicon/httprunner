@@ -1,5 +1,7 @@
 const vm = require('vm');
 const readline = require('readline');
+const path = require('path');
+const Module = require('module');
 
 let globalStore = {};
 let currentLogs = null;
@@ -11,6 +13,27 @@ const rl = readline.createInterface({
   input: process.stdin,
   crlfDelay: Infinity,
 });
+
+function applyRequirePaths(paths) {
+  if (!Array.isArray(paths)) {
+    return;
+  }
+  for (const candidate of paths) {
+    if (typeof candidate !== 'string' || candidate.trim() === '') {
+      continue;
+    }
+    const resolved = path.resolve(candidate.trim());
+    if (!module.paths.includes(resolved)) {
+      module.paths.unshift(resolved);
+    }
+    if (require.main && Array.isArray(require.main.paths) && !require.main.paths.includes(resolved)) {
+      require.main.paths.unshift(resolved);
+    }
+    if (!Module.globalPaths.includes(resolved)) {
+      Module.globalPaths.push(resolved);
+    }
+  }
+}
 
 function clone(obj) {
   return JSON.parse(JSON.stringify(obj || {}));
@@ -168,6 +191,8 @@ async function executeScript(message) {
   const warningChecks = [];
   currentLogs = logs;
   currentWarningChecks = warningChecks;
+
+  applyRequirePaths(message.requirePaths);
 
   const client = {
     global: {

@@ -44,6 +44,7 @@ type Runner struct {
 	teardownIterationRequests []chttp.Request
 	normalRequests            []chttp.Request
 	useNodeRuntime            bool
+	nodeRequirePaths          []string
 }
 
 // NewRunner creates a new Runner with file streaming for memory efficiency
@@ -103,6 +104,11 @@ func (r *Runner) SetVerbose(verbose bool) {
 // EnableNodeRuntime toggles the experimental Node.js scripting runtime
 func (r *Runner) EnableNodeRuntime(enabled bool) {
 	r.useNodeRuntime = enabled
+}
+
+// SetNodeRequirePaths configures additional module resolution paths for the Node runtime
+func (r *Runner) SetNodeRequirePaths(paths []string) {
+	r.nodeRequirePaths = paths
 }
 
 // Run executes requests with file streaming to reduce memory usage
@@ -169,6 +175,9 @@ func (r *Runner) executeWithStreaming() error {
 	globalTemplateEngine.SetMetricsCollector(r.MetricsCollector)
 	if r.useNodeRuntime {
 		globalTemplateEngine.SetRuntimeMode(template.RuntimeModeNode)
+		if len(r.nodeRequirePaths) > 0 {
+			globalTemplateEngine.SetNodeRequirePaths(r.nodeRequirePaths)
+		}
 	}
 	defer func() {
 		if err := globalTemplateEngine.Close(); err != nil && r.Verbose {
@@ -212,6 +221,9 @@ func (r *Runner) executeWithStreaming() error {
 			templateEngine.SetMetricsCollector(r.MetricsCollector)
 			if r.useNodeRuntime {
 				templateEngine.SetRuntimeMode(template.RuntimeModeNode)
+				if len(r.nodeRequirePaths) > 0 {
+					templateEngine.SetNodeRequirePaths(r.nodeRequirePaths)
+				}
 			}
 			defer func() {
 				if err := templateEngine.Close(); err != nil && r.Verbose {

@@ -43,6 +43,7 @@ type nodeExecuteRequest struct {
 	Context          map[string]interface{} `json:"context"`
 	Globals          map[string]interface{} `json:"globals"`
 	RequestFunctions []string               `json:"requestFunctions,omitempty"`
+	RequirePaths     []string               `json:"requirePaths,omitempty"`
 }
 
 type nodeExecuteResponse struct {

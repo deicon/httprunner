@@ -111,5 +111,8 @@ local IPC socket using JSON messages (request events, context updates, script re
   synchronous Go execution behind the scenes—scripts should `await client.some_request()`), and basic logging/timer
   helpers. If a script forgets to `await` a request helper, the runtime emits a warning before the
   step finishes. Metrics access remains a stub until the telemetry surface is replicated in Node.
+- When enabled, the runner automatically includes `node_modules` directories adjacent to the scenario
+  (and up to two parent directories) in the worker's module resolution. Additional paths can still be
+  provided via `NODE_PATH` for custom layouts.
 - The Goja runtime remains the default; the Node-based path is best-effort and intended for early
   feedback on ergonomics and performance.
