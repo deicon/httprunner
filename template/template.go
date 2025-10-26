@@ -482,15 +482,24 @@ func (te *Engine) executeScriptGoja(script string, responseBody string, virtualU
 
 func (te *Engine) executeScriptNode(script string, responseBody string, virtualUserID, iterationID int) error {
 	te.vmMu.Lock()
-	defer te.vmMu.Unlock()
-
-	if te.nodeRuntime == nil {
-		runtime, err := newNodeRuntime()
+	runtime := te.nodeRuntime
+	if runtime == nil {
+		var err error
+		runtime, err = newNodeRuntime()
 		if err != nil {
+			te.vmMu.Unlock()
 			return fmt.Errorf("failed to start Node.js runtime: %w", err)
 		}
 		te.nodeRuntime = runtime
 	}
+
+	reqFuncs := make(map[string]chttp.Request, len(te.requestFunctions))
+	for name, req := range te.requestFunctions {
+		reqFuncs[name] = req
+	}
+	requestExecutor := te.requestExecutor
+	requirePaths := append([]string(nil), te.nodeRequirePaths...)
+	te.vmMu.Unlock()
 
 	// Prepare response data similar to Goja runtime
 	var responseData interface{}
@@ -504,7 +513,7 @@ func (te *Engine) executeScriptNode(script string, responseBody string, virtualU
 		responseData = map[string]interface{}{}
 	}
 
-	request := nodeExecuteRequest{
+	reqPayload := nodeExecuteRequest{
 		Type:         "execute",
 		Script:       script,
 		ResponseBody: responseData,
@@ -515,19 +524,19 @@ func (te *Engine) executeScriptNode(script string, responseBody string, virtualU
 		Globals: te.globalStore.GetAll(),
 	}
 
-	if len(te.requestFunctions) > 0 {
-		request.RequestFunctions = make([]string, 0, len(te.requestFunctions))
-		for name := range te.requestFunctions {
-			request.RequestFunctions = append(request.RequestFunctions, name)
+	if len(reqFuncs) > 0 {
+		reqPayload.RequestFunctions = make([]string, 0, len(reqFuncs))
+		for name := range reqFuncs {
+			reqPayload.RequestFunctions = append(reqPayload.RequestFunctions, name)
 		}
 	}
 
-	if len(te.nodeRequirePaths) > 0 {
-		request.RequirePaths = append(request.RequirePaths, te.nodeRequirePaths...)
+	if len(requirePaths) > 0 {
+		reqPayload.RequirePaths = append(reqPayload.RequirePaths, requirePaths...)
 	}
 
 	handler := func(name string, args []interface{}) (*nodeRequestResponse, error) {
-		request, ok := te.requestFunctions[name]
+		req, ok := reqFuncs[name]
 		if !ok {
 			return &nodeRequestResponse{
 				Success: false,
@@ -535,14 +544,14 @@ func (te *Engine) executeScriptNode(script string, responseBody string, virtualU
 			}, nil
 		}
 
-		if te.requestExecutor == nil {
+		if requestExecutor == nil {
 			return &nodeRequestResponse{
 				Success: false,
 				Error:   "request executor not available",
 			}, nil
 		}
 
-		resp, execErr := te.requestExecutor(request)
+		resp, execErr := requestExecutor(req)
 		result := &nodeRequestResponse{
 			Success: execErr == nil,
 		}
@@ -565,10 +574,15 @@ func (te *Engine) executeScriptNode(script string, responseBody string, virtualU
 		return result, nil
 	}
 
-	response, err := te.nodeRuntime.Execute(request, handler)
+	response, err := runtime.Execute(reqPayload, handler)
+	te.vmMu.Lock()
+	defer te.vmMu.Unlock()
+
 	if err != nil {
-		_ = te.nodeRuntime.Close()
-		te.nodeRuntime = nil
+		if te.nodeRuntime != nil {
+			_ = te.nodeRuntime.Close()
+			te.nodeRuntime = nil
+		}
 		return fmt.Errorf("node runtime execution failed: %w", err)
 	}
 
