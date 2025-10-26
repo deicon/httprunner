@@ -1,0 +1,12 @@
+###
+GET https://jsonplaceholder.typicode.com/todos/1
+Content-Type: application/json
+
+> {%
+  client.global.set("userId", response.body.userId);
+%}
+
+###
+GET https://jsonplaceholder.typicode.com/posts/{{.userId}}
+Content-Type: application/json
+

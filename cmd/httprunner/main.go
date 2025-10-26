@@ -29,6 +29,7 @@ func main() {
 	offset := flag.Int("offset", 0, "Max random startup delay per VU in milliseconds")
 	requestFile := flag.String("f", "", ".http file containing http requests")
 	envFile := flag.String("e", "", ".env file containing environment variables")
+	convert := flag.String("convert", "", "Convert input file to target format (e.g., k6) and print to stdout")
 	reportFormat := flag.String("report", "console", "Report format: console, html, csv, json")
 	reportOutput := flag.String("output", "results", "Output directory for results and reports")
 	reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
@@ -48,6 +49,45 @@ func main() {
 	if !offlineMode && *requestFile == "" {
 		fmt.Println("Error: -f flag is required (or provide -raw to read a raw results file)")
 		os.Exit(1)
+	}
+
+
+
+	// Conversion mode: when -convert is provided, parse and emit converted output
+	if *convert != "" {
+		requests, err := parser.Parse(*requestFile)
+		if err != nil {
+			fmt.Printf("Error parsing file: %v\n", err)
+			os.Exit(1)
+		}
+
+		switch strings.ToLower(*convert) {
+		case "k6":
+			// Generate K6 script
+			genOpts := struct {
+				Iterations int
+				DelayMS    int
+				EnvFile    string
+			}{
+				Iterations: *iterations,
+				DelayMS:    *delay,
+				EnvFile:    *envFile,
+			}
+			// Import and call converter
+			k6gen, err := func() (string, error) {
+				// Local import to avoid unused import when not converting
+				return requireK6Generate(requests, genOpts)
+			}()
+			if err != nil {
+				fmt.Printf("Error generating k6 script: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Print(k6gen)
+			return
+		default:
+			fmt.Printf("Error: unknown converter '%s'\n", *convert)
+			os.Exit(1)
+		}
 	}
 
 	// If -csv shorthand is provided, force CSV formatting and summary detail;
