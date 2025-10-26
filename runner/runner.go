@@ -43,6 +43,7 @@ type Runner struct {
 	teardownUserRequests      []chttp.Request
 	teardownIterationRequests []chttp.Request
 	normalRequests            []chttp.Request
+	useNodeRuntime            bool
 }
 
 // NewRunner creates a new Runner with file streaming for memory efficiency
@@ -97,6 +98,11 @@ func NewRunnerWithEnvFile(concurrency, iterations, runtime, delay int, requests 
 // SetVerbose enables or disables verbose mode
 func (r *Runner) SetVerbose(verbose bool) {
 	r.Verbose = verbose
+}
+
+// EnableNodeRuntime toggles the experimental Node.js scripting runtime
+func (r *Runner) EnableNodeRuntime(enabled bool) {
+	r.useNodeRuntime = enabled
 }
 
 // Run executes requests with file streaming to reduce memory usage
@@ -161,6 +167,14 @@ func (r *Runner) executeWithStreaming() error {
 	// Create a shared template engine for @BeforeUser scripts
 	globalTemplateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
 	globalTemplateEngine.SetMetricsCollector(r.MetricsCollector)
+	if r.useNodeRuntime {
+		globalTemplateEngine.SetRuntimeMode(template.RuntimeModeNode)
+	}
+	defer func() {
+		if err := globalTemplateEngine.Close(); err != nil && r.Verbose {
+			fmt.Printf("warning: failed to close global template engine: %v\n", err)
+		}
+	}()
 
 	// Register all named requests as callable functions
 	for _, req := range r.Requests {
@@ -196,6 +210,14 @@ func (r *Runner) executeWithStreaming() error {
 			// Create template engine for this worker, inheriting global state
 			templateEngine, _ := template.NewTemplateEngineWithEnvFile(r.envFile)
 			templateEngine.SetMetricsCollector(r.MetricsCollector)
+			if r.useNodeRuntime {
+				templateEngine.SetRuntimeMode(template.RuntimeModeNode)
+			}
+			defer func() {
+				if err := templateEngine.Close(); err != nil && r.Verbose {
+					fmt.Printf("[Worker %d] warning: failed to close template engine: %v\n", workerID, err)
+				}
+			}()
 
 			// Copy global state to worker template ein inngine
 			globalStore := globalTemplateEngine.GetGlobalStore()

@@ -80,6 +80,7 @@ github.com/deicon/httprunner/
 - `-offset n`: Max random startup delay between virtual users in milliseconds (default: 0)
 - `-f filename`: .http file containing HTTP requests (required)
 - `-e filename`: .env file containing environment variables (optional)
+- `--experimental-node-runtime`: Execute JavaScript via a managed Node.js worker (requires Node on PATH); enables native npm packages and async helpers.
 
 #### Reporting and Output Parameters
 - `-report format`: Report format: console, html, csv, json (default: html)
@@ -146,6 +147,25 @@ JavaScript code can be embedded using `> {%` and `%}` blocks in two locations:
    - `client.metrics`: Access to performance and execution metrics (see Metrics Access section)
    - `sleep(millis)`: Sleep execution for millis
    - `assert(function() -> bool, message, status_code )`: assert using function returning bool and fail request if false
+
+#### Request helpers and `await`
+
+Any request annotated with `# @name <Name>` can be invoked from JavaScript through `client.<name>()`.
+Even though the default Goja runtime resolves these helpers synchronously, **always** `await` the
+result (e.g. `const res = await client.create_user()`). The experimental Node.js runtime returns a
+Promise for each helper; if it is not awaited the worker emits a warning and the HTTP call may finish
+later than expected.
+
+#### Experimental Node.js runtime
+
+By default scripts run inside the embedded Goja engine. Passing `--experimental-node-runtime` to the
+CLI starts a dedicated `node` worker per virtual user, enabling modern JavaScript features and loading
+native npm packages. The worker communicates with `httprunner` over stdio, mirrors global state, and
+supports the same helper surface (`client.global`, checks, assertions, named requests). Node.js must be
+available on `PATH`; if it is missing or crashes, the CLI falls back to reporting an execution error.
+
+To make additional packages available, install them next to your scenario and extend `NODE_PATH`
+before launching `httprunner`. See `examples/external-node-runtime` for a complete walkthrough.
 
 ### Example requests.http
 

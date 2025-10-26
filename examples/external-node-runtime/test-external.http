@@ -1,0 +1,37 @@
+###
+# @name BeforeUserSetup
+# @BeforeUser
+> {%
+const dayjs = require('dayjs');
+
+console.log('[node-runtime] Using dayjs version', dayjs.version);
+client.global.set('suiteStart', dayjs().toISOString());
+%}
+
+###
+# @name Generate Identifier
+GET https://httpbin.org/get
+Accept: application/json
+
+> {%
+const dayjs = require('dayjs');
+
+const now = dayjs();
+const startedAt = client.global.get('suiteStart');
+const elapsedSeconds = now.diff(dayjs(startedAt), 'second', true);
+
+client.check('Suite start captured', () => Boolean(startedAt), 'Missing suiteStart global value');
+client.check('Elapsed time less than 5 seconds', () => elapsedSeconds < 5, `Elapsed ${elapsedSeconds.toFixed(2)}s > 5s`);
+
+console.log(`[node-runtime] request started at ${startedAt}, elapsed ${elapsedSeconds.toFixed(2)}s`);
+%}
+
+###
+# @TeardownUser
+> {%
+const dayjs = require('dayjs');
+const suiteStart = client.global.get('suiteStart');
+const duration = dayjs().diff(dayjs(suiteStart), 'millisecond');
+
+console.log(`[node-runtime] Total suite duration: ${duration}ms`);
+%}

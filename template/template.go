@@ -127,6 +127,22 @@ func (gs *GlobalStore) GetAll() map[string]interface{} {
 	return result
 }
 
+// ReplaceAll replaces the contents of the store with the provided values
+func (gs *GlobalStore) ReplaceAll(values map[string]interface{}) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	if values == nil {
+		gs.data = make(map[string]interface{})
+		return
+	}
+
+	gs.data = make(map[string]interface{}, len(values))
+	for k, v := range values {
+		gs.data[k] = v
+	}
+}
+
 // Response represents a simplified HTTP response for JavaScript access
 type Response struct {
 	StatusCode int               `json:"status_code"`
@@ -148,7 +164,20 @@ type Engine struct {
 	// Persistent VM for maintaining JavaScript state between executions
 	vm   *goja.Runtime
 	vmMu sync.Mutex
+	// Runtime mode selection and optional Node process
+	runtimeMode RuntimeMode
+	nodeRuntime *nodeRuntime
 }
+
+// RuntimeMode represents the active JavaScript runtime implementation
+type RuntimeMode string
+
+const (
+	// RuntimeModeGoja executes JavaScript using the embedded Goja engine
+	RuntimeModeGoja RuntimeMode = "goja"
+	// RuntimeModeNode executes JavaScript via an external Node.js worker
+	RuntimeModeNode RuntimeMode = "node"
+)
 
 // NewTemplateEngine creates a new template engine
 func NewTemplateEngine() *Engine {
@@ -156,6 +185,7 @@ func NewTemplateEngine() *Engine {
 		globalStore:      NewGlobalStore(),
 		checks:           make([]types.CheckResult, 0),
 		requestFunctions: make(map[string]chttp.Request),
+		runtimeMode:      RuntimeModeGoja,
 	}
 }
 
@@ -171,6 +201,7 @@ func NewTemplateEngineWithEnvFile(envFile string) (*Engine, error) {
 		globalStore:      store,
 		checks:           make([]types.CheckResult, 0),
 		requestFunctions: make(map[string]chttp.Request),
+		runtimeMode:      RuntimeModeGoja,
 	}, nil
 }
 
@@ -366,6 +397,13 @@ func (te *Engine) initializeVM(virtualUserID, iterationID int) *goja.Runtime {
 
 // ExecuteScript executes JavaScript code with access to global store and response
 func (te *Engine) ExecuteScript(script string, responseBody string, virtualUserID, iterationID int) error {
+	if te.runtimeMode == RuntimeModeNode {
+		return te.executeScriptNode(script, responseBody, virtualUserID, iterationID)
+	}
+	return te.executeScriptGoja(script, responseBody, virtualUserID, iterationID)
+}
+
+func (te *Engine) executeScriptGoja(script string, responseBody string, virtualUserID, iterationID int) error {
 	te.vmMu.Lock()
 	defer te.vmMu.Unlock()
 
@@ -440,6 +478,146 @@ func (te *Engine) ExecuteScript(script string, responseBody string, virtualUserI
 	return nil
 }
 
+func (te *Engine) executeScriptNode(script string, responseBody string, virtualUserID, iterationID int) error {
+	te.vmMu.Lock()
+	defer te.vmMu.Unlock()
+
+	if te.nodeRuntime == nil {
+		runtime, err := newNodeRuntime()
+		if err != nil {
+			return fmt.Errorf("failed to start Node.js runtime: %w", err)
+		}
+		te.nodeRuntime = runtime
+	}
+
+	// Prepare response data similar to Goja runtime
+	var responseData interface{}
+	if responseBody != "" {
+		if err := json.Unmarshal([]byte(responseBody), &responseData); err != nil {
+			responseData = map[string]interface{}{
+				"body": responseBody,
+			}
+		}
+	} else {
+		responseData = map[string]interface{}{}
+	}
+
+	request := nodeExecuteRequest{
+		Type:         "execute",
+		Script:       script,
+		ResponseBody: responseData,
+		Context: map[string]interface{}{
+			"userId":      virtualUserID,
+			"iterationId": iterationID,
+		},
+		Globals: te.globalStore.GetAll(),
+	}
+
+	if len(te.requestFunctions) > 0 {
+		request.RequestFunctions = make([]string, 0, len(te.requestFunctions))
+		for name := range te.requestFunctions {
+			request.RequestFunctions = append(request.RequestFunctions, name)
+		}
+	}
+
+	handler := func(name string, args []interface{}) (*nodeRequestResponse, error) {
+		request, ok := te.requestFunctions[name]
+		if !ok {
+			return &nodeRequestResponse{
+				Success: false,
+				Error:   fmt.Sprintf("unknown request function: %s", name),
+			}, nil
+		}
+
+		if te.requestExecutor == nil {
+			return &nodeRequestResponse{
+				Success: false,
+				Error:   "request executor not available",
+			}, nil
+		}
+
+		resp, execErr := te.requestExecutor(request)
+		result := &nodeRequestResponse{
+			Success: execErr == nil,
+		}
+
+		if resp != nil {
+			result.StatusCode = resp.StatusCode
+			result.Headers = resp.Headers
+			result.Body = resp.Body
+		}
+
+		if execErr != nil {
+			result.Error = execErr.Error()
+		}
+
+		if resp == nil && execErr == nil {
+			result.Success = false
+			result.Error = "request executor returned no response"
+		}
+
+		return result, nil
+	}
+
+	response, err := te.nodeRuntime.Execute(request, handler)
+	if err != nil {
+		_ = te.nodeRuntime.Close()
+		te.nodeRuntime = nil
+		return fmt.Errorf("node runtime execution failed: %w", err)
+	}
+
+	if response.Globals != nil {
+		te.globalStore.ReplaceAll(response.Globals)
+	}
+
+	if len(response.Checks) > 0 {
+		now := time.Now()
+		te.checksMu.Lock()
+		for _, check := range response.Checks {
+			te.checks = append(te.checks, types.CheckResult{
+				Name:           check.Name,
+				Success:        check.Success,
+				FailureMessage: check.FailureMessage,
+				Timestamp:      now,
+			})
+		}
+		te.checksMu.Unlock()
+	}
+
+	for _, entry := range response.Logs {
+		if entry.Message != "" {
+			fmt.Println(entry.Message)
+		}
+	}
+
+	switch response.Type {
+	case nodeResponseTypeResult:
+		return nil
+	case nodeResponseTypeAssertion:
+		if response.Assertion == nil {
+			return fmt.Errorf("node runtime assertion missing details")
+		}
+		statusCode := response.Assertion.StatusCode
+		if statusCode == 0 {
+			statusCode = 500
+		}
+		return &AssertionError{
+			Message:    response.Assertion.Message,
+			StatusCode: statusCode,
+		}
+	case nodeResponseTypeError:
+		if response.Error != nil {
+			if response.Error.Stack != "" {
+				return fmt.Errorf("node runtime error: %s\n%s", response.Error.Message, response.Error.Stack)
+			}
+			return fmt.Errorf("node runtime error: %s", response.Error.Message)
+		}
+		return fmt.Errorf("node runtime reported an error without details")
+	default:
+		return fmt.Errorf("unexpected node runtime response type: %s", response.Type)
+	}
+}
+
 // GetGlobalStore returns the global store for external access
 func (te *Engine) GetGlobalStore() *GlobalStore {
 	return te.globalStore
@@ -448,6 +626,24 @@ func (te *Engine) GetGlobalStore() *GlobalStore {
 // SetMetricsCollector sets the metrics collector for accessing metrics in scripts
 func (te *Engine) SetMetricsCollector(collector *metrics.MetricsCollector) {
 	te.metricsCollector = collector
+}
+
+// SetRuntimeMode switches the engine to the provided JavaScript runtime
+func (te *Engine) SetRuntimeMode(mode RuntimeMode) {
+	te.runtimeMode = mode
+}
+
+// Close releases resources associated with the engine
+func (te *Engine) Close() error {
+	te.vmMu.Lock()
+	defer te.vmMu.Unlock()
+
+	if te.nodeRuntime != nil {
+		err := te.nodeRuntime.Close()
+		te.nodeRuntime = nil
+		return err
+	}
+	return nil
 }
 
 // GetChecks returns the current checks and clears the internal list

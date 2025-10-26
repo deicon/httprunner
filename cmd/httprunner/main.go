@@ -36,6 +36,7 @@ func main() {
 	verbose := flag.Bool("v", false, "Verbose mode: print request result JSON for each request")
 	rawFile := flag.String("raw", "", "Path to raw results .jsonl file to generate report without executing")
 	csvShortcut := flag.Bool("csv", false, "Shorthand to output CSV from -raw to stdout (forces -report=csv, -detail=summary)")
+	experimentalNodeRuntime := flag.Bool("experimental-node-runtime", false, "Use experimental Node.js runtime for JavaScript execution")
 
 	flag.Parse()
 
@@ -221,6 +222,8 @@ func main() {
 
 	// Set verbose flag
 	r.SetVerbose(*verbose)
+	// Toggle experimental Node runtime if requested
+	r.EnableNodeRuntime(*experimentalNodeRuntime)
 	// Apply startup offset between VU spawns, if provided
 	r.StartupOffset = *offset
 
