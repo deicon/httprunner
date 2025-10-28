@@ -51,8 +51,6 @@ func main() {
 		os.Exit(1)
 	}
 
-
-
 	// Conversion mode: when -convert is provided, parse and emit converted output
 	if *convert != "" {
 		requests, err := parser.Parse(*requestFile)
