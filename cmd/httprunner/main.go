@@ -36,6 +36,7 @@ func main() {
 	verbose := flag.Bool("v", false, "Verbose mode: print request result JSON for each request")
 	rawFile := flag.String("raw", "", "Path to raw results .jsonl file to generate report without executing")
 	csvShortcut := flag.Bool("csv", false, "Shorthand to output CSV from -raw to stdout (forces -report=csv, -detail=summary)")
+	experimentalNodeRuntime := flag.Bool("experimental-node-runtime", false, "Use experimental Node.js runtime for JavaScript execution")
 
 	flag.Parse()
 
@@ -221,6 +222,59 @@ func main() {
 
 	// Set verbose flag
 	r.SetVerbose(*verbose)
+	// Toggle experimental Node runtime if requested
+	r.EnableNodeRuntime(*experimentalNodeRuntime)
+	if *experimentalNodeRuntime {
+		modulePaths := make([]string, 0)
+		seen := make(map[string]struct{})
+		addPath := func(candidate string, requireDirCheck bool) {
+			if candidate == "" {
+				return
+			}
+			absPath, err := filepath.Abs(candidate)
+			if err != nil {
+				absPath = filepath.Clean(candidate)
+			} else {
+				absPath = filepath.Clean(absPath)
+			}
+			if _, ok := seen[absPath]; ok {
+				return
+			}
+			if requireDirCheck {
+				info, statErr := os.Stat(absPath)
+				if statErr != nil || !info.IsDir() {
+					return
+				}
+			}
+			seen[absPath] = struct{}{}
+			modulePaths = append(modulePaths, absPath)
+		}
+
+		if !offlineMode && *requestFile != "" {
+			dir := filepath.Dir(*requestFile)
+			for depth := 0; depth < 3 && dir != ""; depth++ {
+				nodeModulesPath := filepath.Join(dir, "node_modules")
+				addPath(nodeModulesPath, true)
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					break
+				}
+				dir = parent
+			}
+		}
+
+		if envPaths := os.Getenv("NODE_PATH"); envPaths != "" {
+			for _, segment := range strings.Split(envPaths, string(os.PathListSeparator)) {
+				trimmed := strings.TrimSpace(segment)
+				if trimmed == "" {
+					continue
+				}
+				addPath(trimmed, true)
+			}
+		}
+
+		r.SetNodeRequirePaths(modulePaths)
+	}
 	// Apply startup offset between VU spawns, if provided
 	r.StartupOffset = *offset
 
