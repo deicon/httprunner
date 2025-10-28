@@ -37,6 +37,152 @@ github.com/deicon/httprunner/
 ./httprunner -u 20 -i 10 -d 1000 -f requests.http
 ```
 
+## K6 Export
+
+httprunner can convert .http files to [k6](https://k6.io/) JavaScript test scripts, enabling you to leverage k6's advanced load testing features while maintaining your existing .http request definitions.
+
+### Usage
+
+```bash
+./httprunner -convert k6 -f requests.http > test.js
+```
+
+### Parameters
+
+- `-convert k6`: Converts the .http file to k6 format
+- `-f filename`: Source .http file to convert (required)
+- `-i n`: Number of iterations for the k6 script (default: 1)
+- `-d n`: Delay between requests in milliseconds (default: 0)
+- `-e filename`: .env file containing environment variable defaults
+
+### Example
+
+```bash
+# Basic conversion
+./httprunner -convert k6 -f requests.http > test.js
+
+# With custom iterations and delay
+./httprunner -convert k6 -i 100 -d 500 -f requests.http > load-test.js
+
+# With environment variable defaults
+./httprunner -convert k6 -e .env -f requests.http > test.js
+
+# Run the generated k6 script
+k6 run test.js
+```
+
+### How It Works
+
+The converter transforms your .http file into a k6-compatible JavaScript script:
+
+1. **Template Variables**: Converts httprunner placeholders `{{.VARIABLE}}` to k6 template literals `${vars.VARIABLE}`
+2. **Environment Defaults**: Loads defaults from the .env file (if provided) for discovered placeholder variables
+3. **Variable Override**: Generated scripts use k6's `__ENV` to allow runtime variable overrides via `-e KEY=VALUE`
+4. **Pre/Post Scripts**: Preserves JavaScript pre-request and post-request scripts with appropriate context
+5. **Request Chaining**: Maintains request order and dependencies through global variable sharing
+
+### Generated Script Structure
+
+The k6 script includes:
+
+- **Options block**: Configures iterations based on `-i` parameter
+- **Defaults object**: Contains environment variable defaults from .env file
+- **Vars proxy**: Enables runtime variable override via k6's `__ENV` or script-level assignment
+- **Client API**: Provides `client.global.set/get` for variable management compatible with httprunner scripts
+- **Request execution**: Converts HTTP requests to appropriate k6 `http.*` method calls
+- **Sleep delays**: Adds `sleep()` calls between requests based on `-d` parameter
+
+### Example Conversion
+
+**Input (requests.http):**
+```
+###
+# @name Create User
+> {%
+client.global.set("timestamp", Date.now().toString())
+%}
+
+POST {{.BASEURL}}/api/users
+Authorization: Bearer {{.TOKEN}}
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "timestamp": "{{.timestamp}}"
+}
+
+> {%
+var jsonData = response.body
+client.global.set("userId", jsonData.id)
+%}
+
+###
+# @name Get User
+GET {{.BASEURL}}/api/users/{{.userId}}
+Authorization: Bearer {{.TOKEN}}
+```
+
+**Output (k6 script):**
+```javascript
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  iterations: 1,
+};
+
+const defaults = {BASEURL: 'http://localhost:8080', TOKEN: 'secret123'};
+const vars = new Proxy(Object.assign({}, defaults), {
+  get: (t, p) => (typeof __ENV !== 'undefined' && __ENV[p] !== undefined ? __ENV[p] : t[p]),
+  set: (t, p, v) => { t[p] = v; return true; },
+});
+
+const client = { global: { set: (k, v) => { vars[k] = v; }, get: (k) => vars[k] } };
+function safeJson(s) { try { return JSON.parse(s); } catch (_) { return s; } }
+
+export default function () {
+  let response;
+  // Pre-script
+  client.global.set("timestamp", Date.now().toString())
+
+  const httpRes_0 = http.post(`${vars.BASEURL}/api/users`, `{
+  "username": "testuser",
+  "timestamp": "${vars.timestamp}"
+}`, { headers: {'Authorization': `Bearer ${vars.TOKEN}`, 'Content-Type': 'application/json'} });
+  const response_0 = { body: safeJson(httpRes_0.body), status: httpRes_0.status, headers: httpRes_0.headers };
+  response = response_0;
+  // Post-script
+  var jsonData = response.body
+  client.global.set("userId", jsonData.id)
+
+  const httpRes_1 = http.get(`${vars.BASEURL}/api/users/${vars.userId}`, { headers: {'Authorization': `Bearer ${vars.TOKEN}`} });
+  const response_1 = { body: safeJson(httpRes_1.body), status: httpRes_1.status, headers: httpRes_1.headers };
+  response = response_1;
+}
+```
+
+### Running k6 Tests
+
+```bash
+# Run with default environment variables from .env
+k6 run test.js
+
+# Override environment variables at runtime
+k6 run -e BASEURL=https://api.example.com -e TOKEN=xyz123 test.js
+
+# Scale up with virtual users
+k6 run --vus 50 --duration 30s test.js
+
+# Use k6 cloud for distributed testing
+k6 cloud test.js
+```
+
+### Limitations
+
+- **Checks**: httprunner `client.check()` calls are not automatically converted to k6 checks. Manual adaptation may be required.
+- **Metrics**: httprunner's `client.metrics` API is not available in k6. Use k6's native metrics and custom metrics instead.
+- **Lifecycle requests**: Requests marked with lifecycle stages (setup/teardown) are skipped in conversion with comments.
+
 ## HTTP Request File Format
 
 Requests are separated by `###` and follow this format:
