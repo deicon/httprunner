@@ -34,6 +34,7 @@ func main() {
 	reportDetail := flag.String("detail", "summary", "Report detail level: summary, goroutine, iteration, full")
 	verbose := flag.Bool("v", false, "Verbose mode: print request result JSON for each request")
 	rawFile := flag.String("raw", "", "Path to raw results .jsonl file to generate report without executing")
+	csvShortcut := flag.Bool("csv", false, "Shorthand to output CSV from -raw to stdout (forces -report=csv, -detail=summary)")
 
 	flag.Parse()
 
@@ -47,6 +48,19 @@ func main() {
 	if !offlineMode && *requestFile == "" {
 		fmt.Println("Error: -f flag is required (or provide -raw to read a raw results file)")
 		os.Exit(1)
+	}
+
+	// If -csv shorthand is provided, force CSV formatting and summary detail;
+	// also prefer printing to stdout for easy redirection.
+	forceStdout := false
+	if *csvShortcut {
+		*reportFormat = string(types.FormatCSV)
+		*reportDetail = string(types.DetailSummary)
+		forceStdout = true
+		if !offlineMode {
+			fmt.Println("Error: -csv requires -raw to be provided")
+			os.Exit(1)
+		}
 	}
 
 	// Validate runtime vs iterations parameters (only for execution mode)
@@ -117,7 +131,7 @@ func main() {
 
 		// Output handling mirrors execution mode
 		format := types.ReportFormat(strings.ToLower(*reportFormat))
-		if format == types.FormatConsole {
+		if format == types.FormatConsole || forceStdout {
 			fmt.Print(reportContent)
 		} else {
 			// Ensure output directory exists
