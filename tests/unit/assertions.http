@@ -1,3 +1,24 @@
+### Simple Assert Test
+# @name Simple Assert Test
+> {%
+console.log("Pre-request script starting");
+try {
+    client.assert(function() {
+        return true;
+    }, "This should pass", 400);
+    console.log("Assert passed successfully");
+} catch (e) {
+    console.log("Error in assert: " + e);
+}
+%}
+
+POST https://httpbin.org/post
+Content-Type: application/json
+
+{
+  "test": "simple"
+}
+
 ### 
 # @name Test Assert Pre-request Success
 > {%
@@ -98,6 +119,42 @@ client.assert(function() {
 }, "Request should complete within 5 seconds", 408);
 
 console.log("✅ Performance check passed: " + duration + "ms");
+%}
+
+###
+### 
+# @name Test Assert Failure
+> {%
+console.log("Testing assert failure...");
+client.assert(function() {
+    return false; // This should fail
+}, "This assertion should fail", 400);
+console.log("This should never be logged");
+%}
+
+POST https://httpbin.org/post
+Content-Type: application/json
+
+{
+  "test": "should not execute"
+}
+
+###
+### 
+# @name Test Post-Request Assert
+POST https://httpbin.org/post
+Content-Type: application/json
+
+{
+  "test": "post-assert"
+}
+
+> {%
+console.log("Testing post-request assertion");
+client.assert(function() {
+    return response.body && response.body.json && response.body.json.test === "wrong-value";
+}, "Response should contain expected test value", 422);
+console.log("This should not be logged");
 %}
 
 ###

@@ -4,7 +4,7 @@
 - `cmd/httprunner`: CLI to execute .http scenarios and produce reports.
 - `cmd/harparser`: HAR → `.http` extractor tool.
 - `parser`, `runner`, `reporting`, `metrics`, `http`, `template`: Core Go packages.
-- `tests`: End‑to‑end `.http` suites; `examples` contains smaller samples.
+- `tests`: All `.http` test files organized into `e2e/`, `unit/`, and `examples/` subdirectories.
 - `testapi`, `docker-compose.yml`: Local test services (API + toxiproxy).
 - `build/`, `results/` or `reports/`: Build artifacts and test outputs.
 
@@ -14,7 +14,7 @@
 - `make dev` — fast local build without version ldflags.
 - `make test` / `make test-coverage` — run Go unit tests (all packages).
 - `make fmt` / `make lint` / `make check` — format, lint (if installed), run tests.
-- E2E: `./run-tests.sh` — spins up Docker services and runs `tests/*.http` with reports in `reports/`.
+- E2E: `./run-tests.sh` — spins up Docker services and runs `tests/e2e/comprehensive-test.http` with reports in `reports/`.
 - Docker: `docker compose up --profile runner httprunner` runs the comprehensive suite defined in compose.
 
 ## Coding Style & Naming
@@ -25,7 +25,7 @@
 
 ## Testing Guidelines
 - Unit tests: `_test.go`, functions `TestXxx(*testing.T)`. Run with `go test ./...`.
-- E2E: author `.http` files under `tests/`. Prefer environment placeholders (e.g., `{{.token}}`) and `.env` files.
+- E2E: author `.http` files under `tests/e2e/` or `tests/unit/`. Use `tests/examples/` for documentation. Prefer environment placeholders (e.g., `{{.token}}`) and `.env` files.
 - Coverage: keep critical packages (parser, runner, reporting) well covered; run `make test-coverage` locally.
 
 ## Commit & PR Guidelines
@@ -34,5 +34,5 @@
 - CI/readiness: ensure `make check` passes and `make build` succeeds; avoid committing generated artifacts in `build/` or `results/`.
 
 ## Tips & Utilities
-- Run `httprunner -f tests/comprehensive-test.http -u 5 -i 10 -d 50 -report html -output results` locally.
+- Run `httprunner -f tests/e2e/comprehensive-test.http -u 5 -i 10 -d 50 -report html -output results` locally.
 - Convert recordings: `harparser -f recording.har -filter api/v1 -o requests.http`.

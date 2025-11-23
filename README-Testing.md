@@ -78,10 +78,10 @@ This will:
 docker-compose up --build -d testapi toxiproxy
 
 # Run specific test file
-docker-compose run --rm httprunner ./httprunner -u 3 -i 5 -f tests/comprehensive-test.http
+docker-compose run --rm httprunner ./httprunner -u 3 -i 5 -f tests/e2e/comprehensive-test.http
 
 # Run with Toxiproxy simulation
-docker-compose run --rm httprunner ./httprunner -u 2 -i 3 -f tests/toxiproxy-demo.http
+docker-compose run --rm httprunner ./httprunner -u 2 -i 3 -f tests/e2e/toxiproxy-demo.http
 
 # View logs
 docker-compose logs testapi
@@ -93,7 +93,7 @@ docker-compose down -v
 
 ## Test Files
 
-### `tests/comprehensive-test.http`
+### `tests/e2e/comprehensive-test.http`
 Complete test suite demonstrating all HTTP Runner features:
 - ✅ Health checks
 - ✅ CRUD operations (Users, Products)
@@ -159,7 +159,7 @@ The included workflow (`.github/workflows/integration-test.yml`) will:
 ```bash
 # High concurrency test
 docker-compose run --rm httprunner \
-  ./httprunner -u 50 -i 20 -d 100 -f tests/comprehensive-test.http \
+  ./httprunner -u 50 -i 20 -d 100 -f tests/e2e/comprehensive-test.http \
   --html-report reports/load-test.html
 
 # Stress test with Toxiproxy
@@ -173,7 +173,7 @@ curl -X POST http://localhost:8474/proxies/testapi_proxy/toxics \
 
 # 3. Run tests
 docker-compose run --rm httprunner \
-  ./httprunner -u 10 -i 50 -f tests/comprehensive-test.http
+  ./httprunner -u 10 -i 50 -f tests/e2e/comprehensive-test.http
 ```
 
 ### Network Failure Simulation
@@ -188,11 +188,11 @@ curl -X POST http://localhost:8474/proxies/testapi_proxy/toxics \
 
 ### Adding New Endpoints
 1. Edit `testapi/main.go` to add new handlers
-2. Update `tests/comprehensive-test.http` with new test cases
+2. Update `tests/e2e/comprehensive-test.http` with new test cases
 3. Rebuild with `docker-compose build testapi`
 
 ### Custom Test Scenarios
-1. Create new `.http` files in the `tests/` directory
+1. Create new `.http` files in the `tests/e2e/` or `tests/unit/` directory
 2. Use the same format as existing files
 3. Reference environment variables with `{{.VARIABLE_NAME}}`
 
@@ -221,7 +221,7 @@ docker-compose restart
 ```bash
 # Run with verbose logging
 docker-compose run --rm httprunner \
-  ./httprunner -u 1 -i 1 -f tests/comprehensive-test.http -v
+  ./httprunner -u 1 -i 1 -f tests/e2e/comprehensive-test.http -v
 
 # Check API directly
 curl http://localhost:8080/health

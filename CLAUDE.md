@@ -436,7 +436,7 @@ if (!baseline) {
 
 #### Complete Metrics Dashboard Example
 
-See `examples/metrics-showcase.http` for a comprehensive example demonstrating:
+See `tests/examples/metrics-showcase.http` for a comprehensive example demonstrating:
 - Performance baseline establishment
 - Load pattern analysis
 - Error rate monitoring  

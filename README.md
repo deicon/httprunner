@@ -167,7 +167,7 @@ available on `PATH`; if it is missing or crashes, the CLI falls back to reportin
 When the flag is enabled, `httprunner` automatically adds any `node_modules` directories found next
 to the `.http` file (and up to two parent directories) to Node's resolution paths. For custom
 layouts, you can still extend `NODE_PATH` before launching the runner. See
-`examples/external-node-runtime` for a complete walkthrough.
+`tests/examples/external-node-runtime` for a complete walkthrough.
 
 ### Example requests.http
 
@@ -375,7 +375,7 @@ if (!baseline) {
 
 #### Complete Metrics Dashboard Example
 
-See `examples/metrics-showcase.http` for a comprehensive example demonstrating:
+See `tests/examples/metrics-showcase.http` for a comprehensive example demonstrating:
 - Performance baseline establishment
 - Load pattern analysis
 - Error rate monitoring  

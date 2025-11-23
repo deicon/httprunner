@@ -58,7 +58,7 @@ services:
     command: >
       sh -c "
         echo 'Starting comprehensive test suite...' &&
-        ./httprunner -u 5 -i 10 -d 50 -f /requests/comprehensive-test.http -output /reports -detail summary -report html &&
+        ./httprunner -u 5 -i 10 -d 50 -f /requests/e2e/comprehensive-test.http -output /reports -detail summary -report html &&
         echo 'Test completed. Results saved in reports/'
       "
     networks:
