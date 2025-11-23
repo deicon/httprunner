@@ -3,7 +3,7 @@
 ## Project Structure & Modules
 - `cmd/httprunner`: CLI to execute .http scenarios and produce reports.
 - `cmd/harparser`: HAR → `.http` extractor tool.
-- `parser`, `runner`, `reporting`, `metrics`, `http`, `template`: Core Go packages.
+- `src/parser`, `src/runner`, `src/reporting`, `src/metrics`, `src/http`, `src/template`, `src/converter`: Core Go packages.
 - `tests`: All `.http` test files organized into `e2e/`, `unit/`, and `examples/` subdirectories.
 - `testapi`, `docker-compose.yml`: Local test services (API + toxiproxy).
 - `build/`, `results/` or `reports/`: Build artifacts and test outputs.

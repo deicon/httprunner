@@ -52,18 +52,29 @@ Notes:
 
 ```
 github.com/deicon/httprunner/
-├── main.go              # Entry point and CLI argument parsing
-├── http/
-│   └── requests.go      # HTTP request data structure
-├── parser/
-│   ├── parser.go        # .http file parsing logic
-│   └── parser_test.go   # Parser tests
-├── runner/
-│   └── runner.go        # Request execution and concurrency management
-├── docs/
-│   └── specs/
-│       └── requirements.md  # Project requirements and specifications
-└── requests.http        # Sample HTTP requests file
+├── cmd/
+│   ├── httprunner/       # Main CLI entry point
+│   └── harparser/        # HAR to .http converter
+├── src/
+│   ├── http/
+│   │   └── requests.go   # HTTP request data structure
+│   ├── parser/
+│   │   ├── parser.go     # .http file parsing logic
+│   │   └── parser_test.go # Parser tests
+│   ├── runner/
+│   │   └── runner.go     # Request execution and concurrency management
+│   ├── reporting/        # Report generation and formatters
+│   ├── metrics/          # Metrics collection
+│   ├── template/         # Template processing
+│   └── converter/        # Format converters (e.g., K6)
+├── tests/
+│   ├── e2e/              # End-to-end test scenarios
+│   ├── unit/             # Unit test scenarios
+│   └── examples/         # Example .http files
+├── testapi/              # Test API service
+└── docs/
+    └── specs/
+        └── requirements.md  # Project requirements and specifications
 ```
 
 ## Usage
