@@ -232,6 +232,53 @@ jobs:
         git commit -m "chore(homebrew): update formulas for ${TAG}"
         git push origin "HEAD:${{ github.event.repository.default_branch }}"
 
+  integration-test:
+    name: Integration Test
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: Install dependencies
+      run: make deps
+      
+    - name: Build httprunner
+      run: make build
+      
+    - name: Start test services
+      run: |
+        docker compose up -d testapi toxiproxy
+        echo "Waiting for services to be healthy..."
+        sleep 30
+        docker ps
+        
+    - name: Run E2E comprehensive test
+      run: |
+        ./build/httprunner \
+          -f tests/e2e/comprehensive-test.http \
+          -u 2 -i 3 \
+          -report console -detail summary \
+          -e <(echo "BASEURL=http://localhost:8080")
+        
+    - name: Run E2E toxiproxy test
+      run: |
+        ./build/httprunner \
+          -f tests/e2e/toxiproxy-demo.http \
+          -u 1 -i 2 \
+          -report console -detail summary \
+          -e <(echo "TOXIPROXY_URL=http://localhost:8081")
+        
+    - name: Stop test services
+      if: always()
+      run: docker compose down -v
+
   docker:
     name: Docker Build
     needs: test
@@ -279,7 +326,7 @@ jobs:
 
   semantic_release:
     name: Semantic Release
-    needs: [test, build]
+    needs: [test, build, integration-test]
     runs-on: ubuntu-latest
     # Run only when a PR into develop is closed and merged (supports squash/rebase/merge)
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'

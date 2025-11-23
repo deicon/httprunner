@@ -1,2 +1,0 @@
-{"Name":"Test Assert Pre-request Success","Verb":"POST","URL":"https://httpbin.org/post","StatusCode":200,"ResponseTime":1793491167,"Success":true,"Error":"","Timestamp":"2025-10-26T17:04:43.320758+01:00","VirtualUserID":0,"IterationID":0,"Checks":[]}
-{"Name":"Test Assert Pre-request Failure","Verb":"POST","URL":"https://httpbin.org/post","StatusCode":401,"ResponseTime":0,"Success":false,"Error":"Authentication token is required","Timestamp":"2025-10-26T17:04:45.379135+01:00","VirtualUserID":0,"IterationID":0,"Checks":null}
