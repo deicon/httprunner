@@ -1,4 +1,4 @@
-### Simple Assert Test
+### 
 # @name Simple Assert Test
 > {%
 console.log("Pre-request script starting");
