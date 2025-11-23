@@ -12,5 +12,5 @@ Content-Type: application/json
 %}
 
 ###
-GET http://localhost:8080/api/pollingjob/{{jobId}}
+GET http://localhost:8080/api/pollingjob/{{.jobId}}
 Content-Type: application/json

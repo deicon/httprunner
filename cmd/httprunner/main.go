@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/deicon/httprunner/parser"
-	"github.com/deicon/httprunner/reporting"
-	"github.com/deicon/httprunner/reporting/formatters/hierarchical"
-	"github.com/deicon/httprunner/reporting/types"
-	"github.com/deicon/httprunner/runner"
+	"github.com/deicon/httprunner/src/parser"
+	"github.com/deicon/httprunner/src/reporting"
+	"github.com/deicon/httprunner/src/reporting/formatters/hierarchical"
+	"github.com/deicon/httprunner/src/reporting/types"
+	"github.com/deicon/httprunner/src/runner"
 )
 
 // version is populated at build time via ldflags (-X main.version=...)
