@@ -22,7 +22,7 @@ func main() {
 	// Command line flags
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.BoolVar(showVersion, "V", false, "Print version and exit")
-	concurrency := flag.Int("u", 1, "Number of parallel virtual parallel users")
+	concurrency := flag.Int("u", 1, "Number of parallel virtual users")
 	iterations := flag.Int("i", 1, "Number of iterations")
 	runtime := flag.Int("r", 0, "Runtime duration in seconds (0 means use iterations)")
 	delay := flag.Int("d", 0, "Delay between iterations in milliseconds")
